@@ -44,7 +44,7 @@ export const widgetCommand = {
     )
     .addSubcommand((sub) =>
       sub
-        .setName('primary')
+        .setName('image')
         .setDescription(
           'Choose which image takes priority in your widget',
         )
@@ -71,7 +71,7 @@ export const widgetCommand = {
       await handleSetup(interaction, lastfmService);
     } else if (subcommand === 'refresh') {
       await handleRefresh(interaction, lastfmService);
-    } else if (subcommand === 'primary') {
+    } else if (subcommand === 'image') {
       await handlePrimary(interaction);
     }
   },
