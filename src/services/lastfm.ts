@@ -95,7 +95,9 @@ export class LastFmService {
     const match = html.match(
       /<meta\s+property="og:image"\s+content="([^"]+)"/i,
     );
-    return match?.[1] ?? null;
+    const ogUrl = match?.[1] ?? null;
+    if (!ogUrl) return null;
+    return ogUrl.replace('/ar0/', '/500x500/');
   }
 
   async getTopAlbumName(username: string): Promise<string> {

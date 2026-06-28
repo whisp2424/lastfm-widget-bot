@@ -28,16 +28,11 @@ export async function refreshUserWidget(
       lastfmService.getLovedTrackCount(username),
     ]);
 
-  function cropSquare(url: string): string {
-    return `https://wsrv.nl/?url=${encodeURIComponent(url)}&fit=cover&ar=1:1`;
-  }
-
   const avatarUrl =
     info.image?.find((i) => i.size === 'extralarge')?.['#text']?.replace('/300x300/', '/500x500/') ?? null;
 
-  const artistImg = topArtist.image;
   const primaryImage =
-    (artistImg && !isDefaultImage(artistImg) ? cropSquare(artistImg) : null)
+    (!isDefaultImage(topArtist.image) ? topArtist.image : null)
     ?? (!isDefaultImage(topTrack.cover) ? topTrack.cover : null)
     ?? (!isDefaultImage(avatarUrl) ? avatarUrl : null);
 
