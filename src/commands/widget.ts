@@ -3,6 +3,10 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ActionRowBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
+  EmbedBuilder,
+  ComponentType,
   ApplicationIntegrationType,
   InteractionContextType,
   type ChatInputCommandInteraction,
@@ -47,17 +51,6 @@ export const widgetCommand = {
         .setName('image')
         .setDescription(
           'Choose which image takes priority in your widget',
-        )
-        .addStringOption((opt) =>
-          opt
-            .setName('source')
-            .setDescription('The image source to prioritize')
-            .setRequired(true)
-            .addChoices(
-              { name: 'Artist', value: 'artist' },
-              { name: 'Album Cover', value: 'album' },
-              { name: 'Avatar', value: 'avatar' },
-            ),
         ),
     ),
 
@@ -135,15 +128,76 @@ async function handlePrimary(
     return;
   }
 
-  const source = interaction.options.getString('source', true) as
-    | 'artist'
-    | 'album'
-    | 'avatar';
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('primary_image_source')
+    .setPlaceholder('Choose an image source...')
+    .addOptions(
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Artist')
+        .setDescription('Show the top artist image')
+        .setValue('artist')
+        .setEmoji('🎤'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Album Cover')
+        .setDescription('Show the top track album cover')
+        .setValue('album')
+        .setEmoji('💿'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Avatar')
+        .setDescription('Show your Last.fm avatar')
+        .setValue('avatar')
+        .setEmoji('👤'),
+    );
 
-  setPrimarySource(interaction.user.id, source);
-  await interaction.reply({
-    content: `Primary image set to **${source}**. Run \`/widget refresh\` to apply the change.`,
+  const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+    select,
+  );
+
+  const embed = new EmbedBuilder()
+    .setColor(0xba0000)
+    .setTitle('Widget Primary Image')
+    .setDescription(
+      'Choose which image appears as the primary image on your Discord profile widget.\n\nThe selected source will be tried first, falling back to the others if unavailable.',
+    )
+    .addFields(
+      { name: 'Current', value: `\`${user.primary_source}\``, inline: true },
+    );
+
+  const reply = await interaction.reply({
+    embeds: [embed],
+    components: [row],
     ephemeral: true,
+  });
+
+  const collector = reply.createMessageComponentCollector({
+    componentType: ComponentType.StringSelect,
+    filter: (i) =>
+      i.customId === 'primary_image_source' &&
+      i.user.id === interaction.user.id,
+    time: 60_000,
+  });
+
+  collector.on('collect', async (i) => {
+    const value = i.values[0] as 'artist' | 'album' | 'avatar';
+    setPrimarySource(interaction.user.id, value);
+
+    const updatedEmbed = EmbedBuilder.from(embed).setFields(
+      { name: 'Current', value: `\`${value}\``, inline: true },
+    );
+
+    await i.update({
+      content: `Primary image set to **${value}**. Run \`/widget refresh\` to apply the change.`,
+      embeds: [updatedEmbed],
+      components: [],
+    });
+  });
+
+  collector.on('end', async () => {
+    try {
+      await interaction.editReply({ components: [] });
+    } catch {
+      // reply already cleaned up
+    }
   });
 }
 
