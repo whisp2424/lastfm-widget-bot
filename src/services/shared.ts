@@ -31,9 +31,10 @@ export async function refreshUserWidget(
   const avatarUrl =
     info.image?.find((i) => i.size === 'extralarge')?.['#text'] ?? null;
 
-  let artistPicture = !isDefaultImage(topArtist.image) ? topArtist.image : null;
-  if (!artistPicture) artistPicture = !isDefaultImage(topTrack.cover) ? topTrack.cover : null;
-  if (!artistPicture) artistPicture = !isDefaultImage(avatarUrl) ? avatarUrl : null;
+  const primaryImage =
+    (!isDefaultImage(topArtist.image) ? topArtist.image : null)
+    ?? (!isDefaultImage(topTrack.cover) ? topTrack.cover : null)
+    ?? (!isDefaultImage(avatarUrl) ? avatarUrl : null);
 
   const dynamic: DynamicField[] = [
     {
@@ -49,11 +50,20 @@ export async function refreshUserWidget(
     { type: 1, name: 'top_album', value: topAlbum },
   ];
 
-  if (artistPicture) {
+  if (primaryImage) {
+    dynamic.push({
+      type: 3,
+      name: 'primary_image',
+      value: { url: primaryImage },
+    });
+  }
+
+  const rawArtistImage = !isDefaultImage(topArtist.image) ? topArtist.image : null;
+  if (rawArtistImage) {
     dynamic.push({
       type: 3,
       name: 'top_artist_picture',
-      value: { url: artistPicture },
+      value: { url: rawArtistImage },
     });
   }
 
