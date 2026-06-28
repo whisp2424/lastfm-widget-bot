@@ -1,3 +1,5 @@
+export type PrimarySource = 'artist' | 'album' | 'avatar';
+
 export interface UserRow {
   discord_id: string;
   lastfm_username: string;
@@ -5,6 +7,7 @@ export interface UserRow {
   access_token: string | null;
   last_refresh_at: string | null;
   cached_data: string | null;
+  primary_source: PrimarySource;
 }
 
 export interface DynamicField {

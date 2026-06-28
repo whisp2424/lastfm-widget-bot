@@ -8,7 +8,7 @@ import {
   type ChatInputCommandInteraction,
 } from 'discord.js';
 import { config } from '../config.js';
-import { getUser, upsertUser } from '../database.js';
+import { getUser, upsertUser, setPrimarySource } from '../database.js';
 import { refreshUserWidget } from '../services/shared.js';
 import type { LastFmService } from '../services/lastfm.js';
 
@@ -41,6 +41,24 @@ export const widgetCommand = {
         .setDescription(
           'Refresh your widget with the latest Last.fm stats',
         ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('primary')
+        .setDescription(
+          'Choose which image takes priority in your widget',
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName('source')
+            .setDescription('The image source to prioritize')
+            .setRequired(true)
+            .addChoices(
+              { name: 'Artist', value: 'artist' },
+              { name: 'Album Cover', value: 'album' },
+              { name: 'Avatar', value: 'avatar' },
+            ),
+        ),
     ),
 
   async execute(
@@ -53,6 +71,8 @@ export const widgetCommand = {
       await handleSetup(interaction, lastfmService);
     } else if (subcommand === 'refresh') {
       await handleRefresh(interaction, lastfmService);
+    } else if (subcommand === 'primary') {
+      await handlePrimary(interaction);
     }
   },
 };
@@ -98,6 +118,32 @@ async function handleSetup(
   await interaction.editReply({
     content: `Linked to Last.fm user **${username}**!\n\nTo complete setup, click the button below to authorize the application. After authorizing, close the browser tab and run \`/widget refresh\` to push your stats to the widget.`,
     components: [row],
+  });
+}
+
+async function handlePrimary(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
+  const user = getUser(interaction.user.id);
+
+  if (!user) {
+    await interaction.reply({
+      content:
+        'You haven\'t set up your widget yet. Use `/widget setup <username>` first.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const source = interaction.options.getString('source', true) as
+    | 'artist'
+    | 'album'
+    | 'avatar';
+
+  setPrimarySource(interaction.user.id, source);
+  await interaction.reply({
+    content: `Primary image set to **${source}**. Run \`/widget refresh\` to apply the change.`,
+    ephemeral: true,
   });
 }
 

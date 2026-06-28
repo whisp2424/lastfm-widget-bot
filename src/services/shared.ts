@@ -31,10 +31,23 @@ export async function refreshUserWidget(
   const avatarUrl =
     info.image?.find((i) => i.size === 'extralarge')?.['#text']?.replace('/300x300/', '/500x500/') ?? null;
 
-  const primaryImage =
-    (!isDefaultImage(topArtist.image) ? topArtist.image : null)
-    ?? (!isDefaultImage(topTrack.cover) ? topTrack.cover : null)
-    ?? (!isDefaultImage(avatarUrl) ? avatarUrl : null);
+  const images: Record<string, string | null> = {
+    artist: !isDefaultImage(topArtist.image) ? topArtist.image : null,
+    album: !isDefaultImage(topTrack.cover) ? topTrack.cover : null,
+    avatar: !isDefaultImage(avatarUrl) ? avatarUrl : null,
+  };
+
+  const fallbackOrder =
+    user.primary_source === 'album'
+      ? (['album', 'artist', 'avatar'] as const)
+      : user.primary_source === 'avatar'
+        ? (['avatar', 'artist', 'album'] as const)
+        : (['artist', 'album', 'avatar'] as const);
+
+  const primaryImage = fallbackOrder.reduce<string | null>(
+    (acc, key) => acc ?? images[key],
+    null,
+  );
 
   const dynamic: DynamicField[] = [
     {

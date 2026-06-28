@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
-import type { UserRow } from './types.js';
+import type { UserRow, PrimarySource } from './types.js';
 
 const DB_PATH = path.join(process.cwd(), 'widget.db');
 
@@ -23,9 +23,16 @@ function initSchema(): void {
       authorized    INTEGER NOT NULL DEFAULT 0,
       access_token  TEXT,
       last_refresh_at TEXT,
-      cached_data   TEXT
+      cached_data   TEXT,
+      primary_source TEXT NOT NULL DEFAULT 'artist'
     )
   `);
+
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN primary_source TEXT NOT NULL DEFAULT 'artist'`);
+  } catch {
+    // column already exists
+  }
 }
 
 export function upsertUser(discordId: string, lastfmUsername: string): void {
@@ -59,6 +66,16 @@ export function updateRefresh(
     UPDATE users SET last_refresh_at = ?, cached_data = ? WHERE discord_id = ?
   `);
   stmt.run(now, cachedData, discordId);
+}
+
+export function setPrimarySource(
+  discordId: string,
+  source: PrimarySource,
+): void {
+  const stmt = getDb().prepare(`
+    UPDATE users SET primary_source = ? WHERE discord_id = ?
+  `);
+  stmt.run(source, discordId);
 }
 
 export function getAllAuthorizedUsers(): UserRow[] {
