@@ -33,7 +33,7 @@ export async function refreshUserWidget(
   }
 
   const avatarUrl =
-    info.image?.find((i) => i.size === 'extralarge')?.['#text'] ?? null;
+    info.image?.find((i) => i.size === 'extralarge')?.['#text']?.replace('/300x300/', '/500x500/') ?? null;
 
   const artistImg = topArtist.image;
   const primaryImage =

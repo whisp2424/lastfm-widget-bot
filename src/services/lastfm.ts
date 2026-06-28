@@ -124,7 +124,7 @@ export class LastFmService {
       cover =
         info.track?.album?.image?.find((i) => i.size === 'extralarge')?.[
           '#text'
-        ] ?? null;
+        ]?.replace('/300x300/', '/500x500/') ?? null;
     } catch {
       // cover art is optional
     }
