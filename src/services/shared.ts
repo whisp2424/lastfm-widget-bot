@@ -23,7 +23,7 @@ export async function refreshUserWidget(
     await Promise.all([
       lastfmService.getUserInfo(username),
       lastfmService.getTopArtist(username),
-      lastfmService.getTopAlbumName(username),
+      lastfmService.getTopAlbum(username),
       lastfmService.getTopTrack(username),
       lastfmService.getLovedTrackCount(username),
     ]);
@@ -45,9 +45,9 @@ export async function refreshUserWidget(
     { type: 2, name: 'total_scrobbles', value: info.playcount },
     { type: 2, name: 'total_artists', value: info.artistCount },
     { type: 2, name: 'loved_tracks', value: lovedCount },
-    { type: 1, name: 'top_track', value: topTrack.name },
+    { type: 1, name: 'top_track', value: `"${topTrack.name}" by ${topTrack.artist}` },
     { type: 1, name: 'top_artist', value: topArtist.name },
-    { type: 1, name: 'top_album', value: topAlbum },
+    { type: 1, name: 'top_album', value: `"${topAlbum.name}" by ${topAlbum.artist}` },
   ];
 
   if (primaryImage) {

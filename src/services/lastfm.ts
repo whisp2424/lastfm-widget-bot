@@ -100,11 +100,18 @@ export class LastFmService {
     return ogUrl.replace('/ar0/', '/500x500/');
   }
 
-  async getTopAlbumName(username: string): Promise<string> {
+  async getTopAlbum(username: string): Promise<{
+    name: string;
+    artist: string;
+  }> {
     const data = await this.fetch<{
-      topalbums: { album: { name: string }[] };
+      topalbums: { album: { name: string; artist: { name: string } }[] };
     }>('user.getTopAlbums', { user: username, period: 'overall', limit: 1 });
-    return data.topalbums?.album?.[0]?.name ?? '—';
+    const album = data.topalbums?.album?.[0];
+    return {
+      name: album?.name ?? '—',
+      artist: album?.artist?.name ?? '—',
+    };
   }
 
   async getTopTrack(username: string): Promise<{
