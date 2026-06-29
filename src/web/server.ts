@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
 import { setAuthorized } from '../database.js';
+import { resolveOAuth } from '../oauth-store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -24,8 +25,11 @@ export function startWebServer(): void {
       return;
     }
 
+    const discordId = String(state);
+
     try {
-      setAuthorized(String(state), String(access_token));
+      setAuthorized(discordId, String(access_token));
+      resolveOAuth(discordId, String(access_token));
       res.json({ ok: true });
     } catch (err) {
       console.error('[web] Failed to store token:', err);

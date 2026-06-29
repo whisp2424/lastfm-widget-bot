@@ -14,6 +14,7 @@ import {
 import { config } from '../config.js';
 import { getUser, upsertUser, setPrimarySource } from '../database.js';
 import { refreshUserWidget } from '../services/shared.js';
+import { waitForOAuth } from '../oauth-store.js';
 import type { LastFmService } from '../services/lastfm.js';
 
 export const widgetCommand = {
@@ -65,7 +66,7 @@ export const widgetCommand = {
     } else if (subcommand === 'refresh') {
       await handleRefresh(interaction, lastfmService);
     } else if (subcommand === 'image') {
-      await handlePrimary(interaction);
+      await handlePrimary(interaction, lastfmService);
     }
   },
 };
@@ -109,13 +110,47 @@ async function handleSetup(
     new ActionRowBuilder<ButtonBuilder>().addComponents(authorizeButton);
 
   await interaction.editReply({
-    content: `Linked to Last.fm user **${username}**!\n\nTo complete setup, click the button below to authorize the application. After authorizing, close the browser tab and run \`/widget refresh\` to push your stats to the widget.`,
+    content: `Linked to Last.fm user **${username}**!\n\nClick the button below to authorize the application.`,
     components: [row],
   });
+
+  try {
+    await waitForOAuth(interaction.user.id, 5 * 60 * 1000);
+
+    const user = getUser(interaction.user.id);
+    if (user) {
+      await refreshUserWidget(user, lastfmService);
+    }
+
+    const successEmbed = new EmbedBuilder()
+      .setColor(0xa6e3a1)
+      .setTitle('Setup Complete')
+      .setDescription(
+        'Authorization successful! Your widget has been updated with the latest stats.',
+      );
+
+    await interaction.editReply({
+      embeds: [successEmbed],
+      components: [],
+    });
+  } catch {
+    const timeoutEmbed = new EmbedBuilder()
+      .setColor(0xba0000)
+      .setTitle('Authorization Timed Out')
+      .setDescription(
+        'You did not complete the authorization in time. Use `/widget setup <username>` to try again.',
+      );
+
+    await interaction.editReply({
+      embeds: [timeoutEmbed],
+      components: [],
+    });
+  }
 }
 
 async function handlePrimary(
   interaction: ChatInputCommandInteraction,
+  lastfmService: LastFmService,
 ): Promise<void> {
   const user = getUser(interaction.user.id);
 
@@ -181,15 +216,23 @@ async function handlePrimary(
     const value = i.values[0] as 'artist' | 'album' | 'avatar';
     setPrimarySource(interaction.user.id, value);
 
-    const updatedEmbed = EmbedBuilder.from(embed).setFields(
-      { name: 'Current', value: `\`${value}\``, inline: true },
-    );
-
     await i.update({
-      content: `Primary image set to **${value}**. Run \`/widget refresh\` to apply the change.`,
-      embeds: [updatedEmbed],
+      content: `Primary image set to **${value}**. Refreshing widget...`,
+      embeds: [],
       components: [],
     });
+
+    try {
+      await refreshUserWidget(user, lastfmService);
+      await interaction.editReply({
+        content: `Primary image set to **${value}**. Widget refreshed!`,
+      });
+    } catch (err) {
+      console.error(`[image] Refresh failed for ${interaction.user.id}:`, err);
+      await interaction.editReply({
+        content: `Primary image set to **${value}**, but refresh failed. Run \`/widget refresh\` to try again.`,
+      });
+    }
   });
 
   collector.on('end', async () => {
