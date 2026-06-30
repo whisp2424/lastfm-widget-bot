@@ -19,7 +19,7 @@ import type { LastFmService } from '../services/lastfm.js';
 
 const SUCCESS = 0xa6e3a1;
 const ERROR = 0xba0000;
-const INFO = 0x5865f2;
+const INFO = 0xba0000;
 
 export const widgetCommand = {
   builder: new SlashCommandBuilder()
