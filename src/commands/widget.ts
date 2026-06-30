@@ -255,6 +255,7 @@ async function handlePrimary(
   collector.on('collect', async (i) => {
     const value = i.values[0] as 'artist' | 'album' | 'avatar';
     setPrimarySource(interaction.user.id, value);
+    user.primary_source = value;
 
     await i.deferUpdate();
 
