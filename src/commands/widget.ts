@@ -17,6 +17,10 @@ import { refreshUserWidget } from '../services/shared.js';
 import { waitForOAuth } from '../oauth-store.js';
 import type { LastFmService } from '../services/lastfm.js';
 
+const SUCCESS = 0xa6e3a1;
+const ERROR = 0xba0000;
+const INFO = 0x5865f2;
+
 export const widgetCommand = {
   builder: new SlashCommandBuilder()
     .setName('widget')
@@ -83,9 +87,16 @@ async function handleSetup(
     await lastfmService.getUserInfo(username);
   } catch (err) {
     console.error(`[setup] getUserInfo failed for ${username}:`, err);
-    await interaction.editReply(
-      `Could not find Last.fm user **${username}**. Please check the username and try again.`,
-    );
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(ERROR)
+          .setTitle('User Not Found')
+          .setDescription(
+            `Could not find Last.fm user **${username}**. Please check the username and try again.`,
+          ),
+      ],
+    });
     return;
   }
 
@@ -110,39 +121,62 @@ async function handleSetup(
     new ActionRowBuilder<ButtonBuilder>().addComponents(authorizeButton);
 
   await interaction.editReply({
-    content: `Linked to Last.fm user **${username}**!\n\nClick the button below to authorize the application.`,
+    embeds: [
+      new EmbedBuilder()
+        .setColor(INFO)
+        .setTitle('Link Last.fm Account')
+        .setDescription(
+          `Click the button below to authorize the application for **${username}**.\n\nThis will allow the bot to update your Discord profile widget.`,
+        ),
+    ],
     components: [row],
   });
 
   try {
     await waitForOAuth(interaction.user.id, 5 * 60 * 1000);
-
-    const user = getUser(interaction.user.id);
-    if (user) {
-      await refreshUserWidget(user, lastfmService);
-    }
-
-    const successEmbed = new EmbedBuilder()
-      .setColor(0xa6e3a1)
-      .setTitle('Setup Complete')
-      .setDescription(
-        'Authorization successful! Your widget has been updated with the latest stats.',
-      );
-
+  } catch {
     await interaction.editReply({
-      embeds: [successEmbed],
+      embeds: [
+        new EmbedBuilder()
+          .setColor(ERROR)
+          .setTitle('Authorization Timed Out')
+          .setDescription(
+            'You did not complete the authorization within 5 minutes. Use `/widget setup <username>` to try again.',
+          ),
+      ],
       components: [],
     });
-  } catch {
-    const timeoutEmbed = new EmbedBuilder()
-      .setColor(0xba0000)
-      .setTitle('Authorization Timed Out')
-      .setDescription(
-        'You did not complete the authorization in time. Use `/widget setup <username>` to try again.',
-      );
+    return;
+  }
+
+  const user = getUser(interaction.user.id);
+  if (!user) return;
+
+  try {
+    await refreshUserWidget(user, lastfmService);
 
     await interaction.editReply({
-      embeds: [timeoutEmbed],
+      embeds: [
+        new EmbedBuilder()
+          .setColor(SUCCESS)
+          .setTitle('Setup Complete')
+          .setDescription(
+            'Authorization successful! Your widget has been updated with the latest stats.',
+          ),
+      ],
+      components: [],
+    });
+  } catch (err) {
+    console.error(`[setup] Refresh failed for ${interaction.user.id}:`, err);
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(ERROR)
+          .setTitle('Refresh Failed')
+          .setDescription(
+            'Authorization successful, but the widget refresh failed. Run `/widget refresh` to try again.',
+          ),
+      ],
       components: [],
     });
   }
@@ -156,8 +190,14 @@ async function handlePrimary(
 
   if (!user) {
     await interaction.reply({
-      content:
-        'You haven\'t set up your widget yet. Use `/widget setup <username>` first.',
+      embeds: [
+        new EmbedBuilder()
+          .setColor(ERROR)
+          .setTitle('Not Set Up')
+          .setDescription(
+            'You haven\'t set up your widget yet. Use `/widget setup <username>` first.',
+          ),
+      ],
       ephemeral: true,
     });
     return;
@@ -189,7 +229,7 @@ async function handlePrimary(
   );
 
   const embed = new EmbedBuilder()
-    .setColor(0xba0000)
+    .setColor(INFO)
     .setTitle('Widget Primary Image')
     .setDescription(
       'Choose which image appears as the primary image on your Discord profile widget.\n\nThe selected source will be tried first, falling back to the others if unavailable.',
@@ -216,21 +256,32 @@ async function handlePrimary(
     const value = i.values[0] as 'artist' | 'album' | 'avatar';
     setPrimarySource(interaction.user.id, value);
 
-    await i.update({
-      content: `Primary image set to **${value}**. Refreshing widget...`,
-      embeds: [],
-      components: [],
-    });
+    await i.deferUpdate();
 
     try {
       await refreshUserWidget(user, lastfmService);
-      await interaction.editReply({
-        content: `Primary image set to **${value}**. Widget refreshed!`,
+
+      await i.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(SUCCESS)
+            .setTitle('Primary Image Updated')
+            .setDescription(`Primary image set to **${value}** and widget refreshed.`),
+        ],
+        components: [],
       });
     } catch (err) {
       console.error(`[image] Refresh failed for ${interaction.user.id}:`, err);
-      await interaction.editReply({
-        content: `Primary image set to **${value}**, but refresh failed. Run \`/widget refresh\` to try again.`,
+      await i.editReply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(ERROR)
+            .setTitle('Refresh Failed')
+            .setDescription(
+              `Primary image set to **${value}**, but the widget refresh failed. Run \`/widget refresh\` to retry.`,
+            ),
+        ],
+        components: [],
       });
     }
   });
@@ -253,19 +304,40 @@ async function handleRefresh(
   const user = getUser(interaction.user.id);
 
   if (!user) {
-    await interaction.editReply(
-      'You haven\'t set up your widget yet. Use `/widget setup <username>` first.',
-    );
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(ERROR)
+          .setTitle('Not Set Up')
+          .setDescription(
+            'You haven\'t set up your widget yet. Use `/widget setup <username>` first.',
+          ),
+      ],
+    });
     return;
   }
 
   try {
     await refreshUserWidget(user, lastfmService);
-    await interaction.editReply('Widget refreshed successfully!');
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(SUCCESS)
+          .setTitle('Widget Refreshed')
+          .setDescription('Your widget has been updated with the latest Last.fm stats.'),
+      ],
+    });
   } catch (err) {
     console.error(`[refresh] Failed for ${interaction.user.id}:`, err);
-    await interaction.editReply(
-      'An error occurred while refreshing your widget. Make sure you have authorized the application via `/widget setup`.',
-    );
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(ERROR)
+          .setTitle('Refresh Failed')
+          .setDescription(
+            'An error occurred while refreshing your widget. Make sure you have authorized the application via `/widget setup`.',
+          ),
+      ],
+    });
   }
 }
