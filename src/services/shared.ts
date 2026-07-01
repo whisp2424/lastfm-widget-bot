@@ -13,9 +13,11 @@ function formatDate(unixSeconds: string): string {
   });
 }
 
+let _bustId = 0;
 function cacheBust(url: string | null): string | null {
   if (!url) return null;
-  const w = 500 + (Date.now() % 50);
+  _bustId = (_bustId + 1) % 9000;
+  const w = 500 + _bustId;
   return url.replace(/\d+x\d+\//, `${w}x${w}/`);
 }
 
