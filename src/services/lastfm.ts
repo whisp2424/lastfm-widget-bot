@@ -87,7 +87,10 @@ export class LastFmService {
   async getArtistImage(artist: string): Promise<string | null> {
     const url = `${ARTIST_PAGE_BASE}${encodeURIComponent(artist)}`;
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
+      headers: {
+        'User-Agent': 'Mozilla/5.0',
+        'Cache-Control': 'no-cache',
+      },
     });
     if (!res.ok) return null;
 
