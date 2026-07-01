@@ -15,13 +15,18 @@ export function startWebServer(): void {
 
   app.get('/image-proxy', async (req, res) => {
     const imageUrl = req.query.url as string | undefined;
+    const ts = req.query.t as string | undefined;
     if (!imageUrl) {
       res.status(400).end();
       return;
     }
 
+    const bustedUrl = imageUrl.includes('?')
+      ? `${imageUrl}&_t=${ts ?? Date.now()}`
+      : `${imageUrl}?_t=${ts ?? Date.now()}`;
+
     try {
-      const response = await fetch(imageUrl, {
+      const response = await fetch(bustedUrl, {
         headers: { 'User-Agent': 'Mozilla/5.0' },
       });
       if (!response.ok) {

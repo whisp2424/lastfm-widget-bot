@@ -14,7 +14,7 @@ function formatDate(unixSeconds: string): string {
   });
 }
 
-function proxyImage(url: string | null): string | null {
+function proxyArtistImage(url: string | null): string | null {
   if (!url) return null;
   const ts = Date.now();
   return `${config.publicUrl}/image-proxy?url=${encodeURIComponent(url)}&t=${ts}`;
@@ -35,13 +35,12 @@ export async function refreshUserWidget(
       lastfmService.getLovedTrackCount(username),
     ]);
 
-  const avatarUrl = proxyImage(
-    info.image?.find((i) => i.size === 'extralarge')?.['#text']?.replace('/300x300/', '/500x500/') ?? null,
-  );
+  const avatarUrl =
+    info.image?.find((i) => i.size === 'extralarge')?.['#text']?.replace('/300x300/', '/500x500/') ?? null;
 
-  const artistImage = proxyImage(!isDefaultImage(topArtist.image) ? topArtist.image : null);
-  const trackCover = proxyImage(!isDefaultImage(topTrack.cover) ? topTrack.cover : null);
-  const albumCover = proxyImage(!isDefaultImage(topAlbum.cover) ? topAlbum.cover : null);
+  const artistImage = proxyArtistImage(!isDefaultImage(topArtist.image) ? topArtist.image : null);
+  const trackCover = !isDefaultImage(topTrack.cover) ? topTrack.cover : null;
+  const albumCover = !isDefaultImage(topAlbum.cover) ? topAlbum.cover : null;
 
   const images: Record<string, string | null> = {
     artist: artistImage,
