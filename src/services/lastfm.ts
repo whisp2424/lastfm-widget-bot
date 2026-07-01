@@ -93,9 +93,9 @@ export class LastFmService {
 
     const html = await res.text();
     const match = html.match(
-      /src="(https:\/\/lastfm\.freetls\.fastly\.net\/i\/u\/avatar170s\/[a-f0-9]+\.jpg)"/,
+      /<meta\s+property="og:image"\s+content="([^"]+)"/i,
     );
-    return match?.[1]?.replace('/avatar170s/', '/500x500/') ?? null;
+    return match?.[1]?.replace('/ar0/', '/500x500/') ?? null;
   }
 
   async getTopAlbum(username: string): Promise<{
