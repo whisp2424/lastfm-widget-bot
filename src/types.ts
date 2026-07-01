@@ -1,4 +1,4 @@
-export type PrimarySource = 'artist' | 'album' | 'avatar';
+export type PrimarySource = 'artist' | 'track' | 'album' | 'avatar';
 
 export interface UserRow {
   discord_id: string;

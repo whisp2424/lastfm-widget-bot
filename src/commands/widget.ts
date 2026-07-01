@@ -213,8 +213,13 @@ async function handlePrimary(
         .setValue('artist')
         .setEmoji('🎤'),
       new StringSelectMenuOptionBuilder()
+        .setLabel('Track Cover')
+        .setDescription('Show your top track album cover')
+        .setValue('track')
+        .setEmoji('🎵'),
+      new StringSelectMenuOptionBuilder()
         .setLabel('Album Cover')
-        .setDescription('Show the top track album cover')
+        .setDescription('Show your top album cover')
         .setValue('album')
         .setEmoji('💿'),
       new StringSelectMenuOptionBuilder()
@@ -253,7 +258,7 @@ async function handlePrimary(
   });
 
   collector.on('collect', async (i) => {
-    const value = i.values[0] as 'artist' | 'album' | 'avatar';
+    const value = i.values[0] as 'artist' | 'track' | 'album' | 'avatar';
     setPrimarySource(interaction.user.id, value);
     user.primary_source = value;
 

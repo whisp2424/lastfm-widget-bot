@@ -44,16 +44,19 @@ export async function refreshUserWidget(
 
   const images: Record<string, string | null> = {
     artist: artistImage,
+    track: trackCover,
     album: albumCover,
     avatar: avatarUrl,
   };
 
   const fallbackOrder =
-    user.primary_source === 'album'
-      ? (['album', 'artist', 'avatar'] as const)
-      : user.primary_source === 'avatar'
-        ? (['avatar', 'artist', 'album'] as const)
-        : (['artist', 'album', 'avatar'] as const);
+    user.primary_source === 'track'
+      ? (['track', 'artist', 'album', 'avatar'] as const)
+      : user.primary_source === 'album'
+        ? (['album', 'artist', 'track', 'avatar'] as const)
+        : user.primary_source === 'avatar'
+          ? (['avatar', 'artist', 'track', 'album'] as const)
+          : (['artist', 'track', 'album', 'avatar'] as const);
 
   const primaryImage = fallbackOrder.reduce<string | null>(
     (acc, key) => acc ?? images[key],
