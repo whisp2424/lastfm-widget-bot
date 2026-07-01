@@ -1,3 +1,4 @@
+import { config } from '../config.js';
 import { updateRefresh } from '../database.js';
 import { syncWidget } from './discord.js';
 import { isDefaultImage } from './lastfm.js';
@@ -13,12 +14,10 @@ function formatDate(unixSeconds: string): string {
   });
 }
 
-let _bustId = 0;
-function cacheBust(url: string | null): string | null {
+function proxyImage(url: string | null): string | null {
   if (!url) return null;
-  _bustId = (_bustId + 1) % 9000;
-  const w = 500 + _bustId;
-  return url.replace(/\d+x\d+\//, `${w}x${w}/`);
+  const ts = Date.now();
+  return `${config.publicUrl}/image-proxy?url=${encodeURIComponent(url)}&t=${ts}`;
 }
 
 export async function refreshUserWidget(
@@ -36,13 +35,13 @@ export async function refreshUserWidget(
       lastfmService.getLovedTrackCount(username),
     ]);
 
-  const avatarUrl = cacheBust(
+  const avatarUrl = proxyImage(
     info.image?.find((i) => i.size === 'extralarge')?.['#text']?.replace('/300x300/', '/500x500/') ?? null,
   );
 
-  const artistImage = cacheBust(!isDefaultImage(topArtist.image) ? topArtist.image : null);
-  const trackCover = cacheBust(!isDefaultImage(topTrack.cover) ? topTrack.cover : null);
-  const albumCover = cacheBust(!isDefaultImage(topAlbum.cover) ? topAlbum.cover : null);
+  const artistImage = proxyImage(!isDefaultImage(topArtist.image) ? topArtist.image : null);
+  const trackCover = proxyImage(!isDefaultImage(topTrack.cover) ? topTrack.cover : null);
+  const albumCover = proxyImage(!isDefaultImage(topAlbum.cover) ? topAlbum.cover : null);
 
   const images: Record<string, string | null> = {
     artist: artistImage,
