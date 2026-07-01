@@ -33,7 +33,7 @@ export async function refreshUserWidget(
 
   const images: Record<string, string | null> = {
     artist: !isDefaultImage(topArtist.image) ? topArtist.image : null,
-    album: !isDefaultImage(topTrack.cover) ? topTrack.cover : null,
+    album: !isDefaultImage(topAlbum.cover) ? topAlbum.cover : null,
     avatar: !isDefaultImage(avatarUrl) ? avatarUrl : null,
   };
 
@@ -85,6 +85,14 @@ export async function refreshUserWidget(
       type: 3,
       name: 'top_track_cover',
       value: { url: topTrack.cover },
+    });
+  }
+
+  if (topAlbum.cover) {
+    dynamic.push({
+      type: 3,
+      name: 'top_album_cover',
+      value: { url: topAlbum.cover },
     });
   }
 

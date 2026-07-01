@@ -103,14 +103,33 @@ export class LastFmService {
   async getTopAlbum(username: string): Promise<{
     name: string;
     artist: string;
+    cover: string | null;
   }> {
     const data = await this.fetch<{
       topalbums: { album: { name: string; artist: { name: string } }[] };
     }>('user.getTopAlbums', { user: username, period: 'overall', limit: 1 });
     const album = data.topalbums?.album?.[0];
+    if (!album) return { name: '—', artist: '—', cover: null };
+
+    let cover: string | null = null;
+    try {
+      const info = await this.fetch<{
+        album: { image: ImageEntry[] };
+      }>('album.getInfo', {
+        artist: album.artist.name,
+        album: album.name,
+      });
+      cover =
+        info.album?.image?.find((i) => i.size === 'extralarge')?.['#text']
+          ?.replace('/300x300/', '/500x500/') ?? null;
+    } catch {
+      // cover art is optional
+    }
+
     return {
-      name: album?.name ?? '—',
-      artist: album?.artist?.name ?? '—',
+      name: album.name,
+      artist: album.artist.name,
+      cover,
     };
   }
 
