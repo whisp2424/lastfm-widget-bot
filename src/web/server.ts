@@ -13,42 +13,6 @@ export function startWebServer(): void {
   app.use(express.json());
   app.use(express.static(path.join(__dirname, 'public')));
 
-  app.get('/image-proxy', async (req, res) => {
-    const imageUrl = req.query.url as string | undefined;
-    const ts = req.query.t as string | undefined;
-    if (!imageUrl) {
-      res.status(400).end();
-      return;
-    }
-
-    const bustedUrl = imageUrl.includes('?')
-      ? `${imageUrl}&_t=${ts ?? Date.now()}`
-      : `${imageUrl}?_t=${ts ?? Date.now()}`;
-
-    try {
-      const response = await fetch(bustedUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-      });
-      if (!response.ok) {
-        res.status(502).end();
-        return;
-      }
-
-      const contentType =
-        response.headers.get('content-type') ?? 'image/jpeg';
-      const buffer = Buffer.from(await response.arrayBuffer());
-
-      res.set({
-        'Content-Type': contentType,
-        'Content-Length': buffer.length,
-        'Cache-Control': 'public, max-age=3600',
-      });
-      res.end(buffer);
-    } catch {
-      res.status(502).end();
-    }
-  });
-
   app.get('/callback', (_req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'callback.html'));
   });

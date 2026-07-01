@@ -1,4 +1,3 @@
-import { config } from '../config.js';
 import { updateRefresh } from '../database.js';
 import { syncWidget } from './discord.js';
 import { isDefaultImage } from './lastfm.js';
@@ -12,12 +11,6 @@ function formatDate(unixSeconds: string): string {
     month: 'long',
     year: 'numeric',
   });
-}
-
-function proxyArtistImage(url: string | null): string | null {
-  if (!url) return null;
-  const ts = Date.now();
-  return `${config.publicUrl}/image-proxy?url=${encodeURIComponent(url)}&t=${ts}`;
 }
 
 export async function refreshUserWidget(
@@ -38,7 +31,7 @@ export async function refreshUserWidget(
   const avatarUrl =
     info.image?.find((i) => i.size === 'extralarge')?.['#text']?.replace('/300x300/', '/500x500/') ?? null;
 
-  const artistImage = proxyArtistImage(!isDefaultImage(topArtist.image) ? topArtist.image : null);
+  const artistImage = !isDefaultImage(topArtist.image) ? topArtist.image : null;
   const trackCover = !isDefaultImage(topTrack.cover) ? topTrack.cover : null;
   const albumCover = !isDefaultImage(topAlbum.cover) ? topAlbum.cover : null;
 
