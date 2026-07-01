@@ -13,6 +13,12 @@ function formatDate(unixSeconds: string): string {
   });
 }
 
+function cacheBust(url: string | null): string | null {
+  if (!url) return null;
+  const ts = Date.now();
+  return url.includes('?') ? `${url}&v=${ts}` : `${url}?v=${ts}`;
+}
+
 export async function refreshUserWidget(
   user: UserRow,
   lastfmService: LastFmService,
@@ -28,13 +34,18 @@ export async function refreshUserWidget(
       lastfmService.getLovedTrackCount(username),
     ]);
 
-  const avatarUrl =
-    info.image?.find((i) => i.size === 'extralarge')?.['#text']?.replace('/300x300/', '/500x500/') ?? null;
+  const avatarUrl = cacheBust(
+    info.image?.find((i) => i.size === 'extralarge')?.['#text']?.replace('/300x300/', '/500x500/') ?? null,
+  );
+
+  const artistImage = cacheBust(!isDefaultImage(topArtist.image) ? topArtist.image : null);
+  const trackCover = cacheBust(!isDefaultImage(topTrack.cover) ? topTrack.cover : null);
+  const albumCover = cacheBust(!isDefaultImage(topAlbum.cover) ? topAlbum.cover : null);
 
   const images: Record<string, string | null> = {
-    artist: !isDefaultImage(topArtist.image) ? topArtist.image : null,
-    album: !isDefaultImage(topAlbum.cover) ? topAlbum.cover : null,
-    avatar: !isDefaultImage(avatarUrl) ? avatarUrl : null,
+    artist: artistImage,
+    album: albumCover,
+    avatar: avatarUrl,
   };
 
   const fallbackOrder =
@@ -71,28 +82,27 @@ export async function refreshUserWidget(
     });
   }
 
-  const rawArtistImage = !isDefaultImage(topArtist.image) ? topArtist.image : null;
-  if (rawArtistImage) {
+  if (artistImage) {
     dynamic.push({
       type: 3,
       name: 'top_artist_picture',
-      value: { url: rawArtistImage },
+      value: { url: artistImage },
     });
   }
 
-  if (topTrack.cover) {
+  if (trackCover) {
     dynamic.push({
       type: 3,
       name: 'top_track_cover',
-      value: { url: topTrack.cover },
+      value: { url: trackCover },
     });
   }
 
-  if (topAlbum.cover) {
+  if (albumCover) {
     dynamic.push({
       type: 3,
       name: 'top_album_cover',
-      value: { url: topAlbum.cover },
+      value: { url: albumCover },
     });
   }
 
