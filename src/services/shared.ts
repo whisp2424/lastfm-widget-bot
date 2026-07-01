@@ -15,8 +15,8 @@ function formatDate(unixSeconds: string): string {
 
 function cacheBust(url: string | null): string | null {
   if (!url) return null;
-  const ts = Date.now();
-  return url.includes('?') ? `${url}&v=${ts}` : `${url}?v=${ts}`;
+  const w = 500 + (Date.now() % 50);
+  return url.replace(/\d+x\d+\//, `${w}x${w}/`);
 }
 
 export async function refreshUserWidget(
