@@ -19,14 +19,20 @@ export async function refreshUserWidget(
 ): Promise<void> {
   const username = user.lastfm_username;
 
-  const [info, topArtist, topAlbum, topTrack, lovedCount] =
-    await Promise.all([
-      lastfmService.getUserInfo(username),
-      lastfmService.getTopArtist(username),
-      lastfmService.getTopAlbum(username),
-      lastfmService.getTopTrack(username),
-      lastfmService.getLovedTrackCount(username),
-    ]);
+  const [
+    info, topArtist, topAlbum, topAlbum7, topAlbum30,
+    topTrack, topTrack7, topTrack30, lovedCount,
+  ] = await Promise.all([
+    lastfmService.getUserInfo(username),
+    lastfmService.getTopArtist(username),
+    lastfmService.getTopAlbum(username),
+    lastfmService.getTopAlbum(username, '7day'),
+    lastfmService.getTopAlbum(username, '1month'),
+    lastfmService.getTopTrack(username),
+    lastfmService.getTopTrack(username, '7day'),
+    lastfmService.getTopTrack(username, '1month'),
+    lastfmService.getLovedTrackCount(username),
+  ]);
 
   const avatarUrl =
     info.image?.find((i) => i.size === 'extralarge')?.['#text']?.replace('/300x300/', '/500x500/') ?? null;
@@ -94,11 +100,43 @@ export async function refreshUserWidget(
     });
   }
 
+  if (topTrack7.cover) {
+    dynamic.push({
+      type: 3,
+      name: 'top_track_cover_7d',
+      value: { url: topTrack7.cover },
+    });
+  }
+
+  if (topTrack30.cover) {
+    dynamic.push({
+      type: 3,
+      name: 'top_track_cover_30d',
+      value: { url: topTrack30.cover },
+    });
+  }
+
   if (albumCover) {
     dynamic.push({
       type: 3,
       name: 'top_album_cover',
       value: { url: albumCover },
+    });
+  }
+
+  if (topAlbum7.cover) {
+    dynamic.push({
+      type: 3,
+      name: 'top_album_cover_7d',
+      value: { url: topAlbum7.cover },
+    });
+  }
+
+  if (topAlbum30.cover) {
+    dynamic.push({
+      type: 3,
+      name: 'top_album_cover_30d',
+      value: { url: topAlbum30.cover },
     });
   }
 

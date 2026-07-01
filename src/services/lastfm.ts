@@ -98,14 +98,17 @@ export class LastFmService {
     return match?.[1]?.replace('/ar0/', '/500x500/') ?? null;
   }
 
-  async getTopAlbum(username: string): Promise<{
+  async getTopAlbum(
+    username: string,
+    period: string = 'overall',
+  ): Promise<{
     name: string;
     artist: string;
     cover: string | null;
   }> {
     const data = await this.fetch<{
       topalbums: { album: { name: string; artist: { name: string } }[] };
-    }>('user.getTopAlbums', { user: username, period: 'overall', limit: 1 });
+    }>('user.getTopAlbums', { user: username, period, limit: 1 });
     const album = data.topalbums?.album?.[0];
     if (!album) return { name: '—', artist: '—', cover: null };
 
@@ -131,14 +134,17 @@ export class LastFmService {
     };
   }
 
-  async getTopTrack(username: string): Promise<{
+  async getTopTrack(
+    username: string,
+    period: string = 'overall',
+  ): Promise<{
     name: string;
     artist: string;
     cover: string | null;
   }> {
     const data = await this.fetch<{
       toptracks: { track: { name: string; artist: { name: string } }[] };
-    }>('user.getTopTracks', { user: username, period: 'overall', limit: 1 });
+    }>('user.getTopTracks', { user: username, period, limit: 1 });
     const track = data.toptracks?.track?.[0];
     if (!track) return { name: '—', artist: '—', cover: null };
 
