@@ -21,7 +21,7 @@ export async function refreshUserWidget(
 
   const [
     info, topArtist, topAlbum, topAlbum7, topAlbum30,
-    topTrack, topTrack7, topTrack30, lovedCount,
+    topTrack, topTrack7, topTrack30, recentTrack, lovedCount,
   ] = await Promise.all([
     lastfmService.getUserInfo(username),
     lastfmService.getTopArtist(username),
@@ -31,6 +31,7 @@ export async function refreshUserWidget(
     lastfmService.getTopTrack(username),
     lastfmService.getTopTrack(username, '7day'),
     lastfmService.getTopTrack(username, '1month'),
+    lastfmService.getRecentTrack(username),
     lastfmService.getLovedTrackCount(username),
   ]);
 
@@ -142,6 +143,14 @@ export async function refreshUserWidget(
 
   if (avatarUrl) {
     dynamic.push({ type: 3, name: 'avatar', value: { url: avatarUrl } });
+  }
+
+  if (recentTrack.cover) {
+    dynamic.push({
+      type: 3,
+      name: 'last_scrobble_cover',
+      value: { url: recentTrack.cover },
+    });
   }
 
   const payload: WidgetPayload = {

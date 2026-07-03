@@ -164,6 +164,38 @@ export class LastFmService {
     return { name: track.name, artist: track.artist.name, cover };
   }
 
+  async getRecentTrack(username: string): Promise<{
+    name: string;
+    artist: string;
+    cover: string | null;
+    nowPlaying: boolean;
+  }> {
+    const data = await this.fetch<{
+      recenttracks: {
+        track: {
+          name: string;
+          artist: { '#text': string };
+          image: ImageEntry[];
+          '@attr'?: { nowplaying: string };
+        }[];
+      };
+    }>('user.getRecentTracks', { user: username, limit: 1 });
+
+    const track = data.recenttracks?.track?.[0];
+    if (!track) return { name: '—', artist: '—', cover: null, nowPlaying: false };
+
+    const cover =
+      track.image?.find((i) => i.size === 'extralarge')?.['#text']
+        ?.replace('/300x300/', '/500x500/') ?? null;
+
+    return {
+      name: track.name,
+      artist: track.artist['#text'],
+      cover,
+      nowPlaying: track['@attr']?.nowplaying === 'true',
+    };
+  }
+
   async getLovedTrackCount(username: string): Promise<number> {
     const data = await this.fetch<{
       lovedtracks: { '@attr': { total: string } };
