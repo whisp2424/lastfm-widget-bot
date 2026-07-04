@@ -287,7 +287,8 @@ async function handleConfig(
       new StringSelectMenuOptionBuilder()
         .setLabel('Primary Image')
         .setDescription('Choose which image takes priority in your widget')
-        .setValue('primary_image'),
+        .setValue('primary_image')
+        .setEmoji('🖼️'),
     );
 
   const typeSelect = new StringSelectMenuBuilder()
