@@ -25,7 +25,8 @@ function initSchema(): void {
       last_refresh_at TEXT,
       cached_data   TEXT,
       primary_image_type TEXT NOT NULL DEFAULT 'artist',
-      primary_image_period TEXT NOT NULL DEFAULT 'overall'
+      primary_image_period TEXT NOT NULL DEFAULT 'overall',
+      cycle_index INTEGER NOT NULL DEFAULT 0
     )
   `);
 
@@ -36,6 +37,11 @@ function initSchema(): void {
   }
   try {
     db.exec(`ALTER TABLE users ADD COLUMN primary_image_period TEXT NOT NULL DEFAULT 'overall'`);
+  } catch {
+    // column already exists
+  }
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN cycle_index INTEGER NOT NULL DEFAULT 0`);
   } catch {
     // column already exists
   }
@@ -80,9 +86,16 @@ export function setPrimaryImageConfig(
   period: PrimaryImagePeriod,
 ): void {
   const stmt = getDb().prepare(`
-    UPDATE users SET primary_image_type = ?, primary_image_period = ? WHERE discord_id = ?
+    UPDATE users SET primary_image_type = ?, primary_image_period = ?, cycle_index = 0 WHERE discord_id = ?
   `);
   stmt.run(type, period, discordId);
+}
+
+export function advanceCycleIndex(discordId: string, index: number): void {
+  const stmt = getDb().prepare(`
+    UPDATE users SET cycle_index = ? WHERE discord_id = ?
+  `);
+  stmt.run(index, discordId);
 }
 
 export function getAllAuthorizedUsers(): UserRow[] {

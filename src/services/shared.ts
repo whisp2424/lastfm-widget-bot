@@ -1,4 +1,4 @@
-import { updateRefresh } from '../database.js';
+import { updateRefresh, advanceCycleIndex } from '../database.js';
 import { syncWidget } from './discord.js';
 import { isDefaultImage } from './lastfm.js';
 import type { LastFmService } from './lastfm.js';
@@ -19,20 +19,11 @@ function orDefault(url: string | null | undefined): string {
   return url ?? DEFAULT_IMAGE_URL;
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
+const CYCLE_PERIODS = ['overall', '30d', '7d'] as const;
 
-const PERIOD_VARIANTS: Record<string, string[]> = {
-  artist: ['artist_overall', 'artist_7d', 'artist_30d'],
-  track: ['track_overall', 'track_7d', 'track_30d'],
-  album: ['album_overall', 'album_7d', 'album_30d'],
-};
+function safeFetch<T>(promise: Promise<T>, fallback: T): Promise<T> {
+  return promise.catch(() => fallback);
+}
 
 export async function refreshUserWidget(
   user: UserRow,
@@ -40,23 +31,28 @@ export async function refreshUserWidget(
 ): Promise<void> {
   const username = user.lastfm_username;
 
+  const fallbackArtist = { name: '—' as const, image: null };
+  const fallbackAlbum = { name: '—' as const, artist: '—' as const, cover: null };
+  const fallbackTrack = { name: '—' as const, artist: '—' as const, cover: null };
+  const fallbackRecent = { name: '—' as const, artist: '—' as const, cover: null, nowPlaying: false };
+
   const [
     info, topArtist, topArtist7, topArtist30,
     topAlbum, topAlbum7, topAlbum30,
     topTrack, topTrack7, topTrack30, recentTrack, lovedCount,
   ] = await Promise.all([
-    lastfmService.getUserInfo(username),
-    lastfmService.getTopArtist(username),
-    lastfmService.getTopArtist(username, '7day'),
-    lastfmService.getTopArtist(username, '1month'),
-    lastfmService.getTopAlbum(username),
-    lastfmService.getTopAlbum(username, '7day'),
-    lastfmService.getTopAlbum(username, '1month'),
-    lastfmService.getTopTrack(username),
-    lastfmService.getTopTrack(username, '7day'),
-    lastfmService.getTopTrack(username, '1month'),
-    lastfmService.getRecentTrack(username),
-    lastfmService.getLovedTrackCount(username),
+    safeFetch(lastfmService.getUserInfo(username), { playcount: 0, artistCount: 0, name: username, registered: { unixtime: '0' }, image: [] }),
+    safeFetch(lastfmService.getTopArtist(username), fallbackArtist),
+    safeFetch(lastfmService.getTopArtist(username, '7day'), fallbackArtist),
+    safeFetch(lastfmService.getTopArtist(username, '1month'), fallbackArtist),
+    safeFetch(lastfmService.getTopAlbum(username), fallbackAlbum),
+    safeFetch(lastfmService.getTopAlbum(username, '7day'), fallbackAlbum),
+    safeFetch(lastfmService.getTopAlbum(username, '1month'), fallbackAlbum),
+    safeFetch(lastfmService.getTopTrack(username), fallbackTrack),
+    safeFetch(lastfmService.getTopTrack(username, '7day'), fallbackTrack),
+    safeFetch(lastfmService.getTopTrack(username, '1month'), fallbackTrack),
+    safeFetch(lastfmService.getRecentTrack(username), fallbackRecent),
+    safeFetch(lastfmService.getLovedTrackCount(username), 0),
   ]);
 
   const avatarUrl = orDefault(
@@ -101,11 +97,15 @@ export async function refreshUserWidget(
     last_scrobble: !isDefaultImage(recentTrack.cover),
   };
 
-  const primaryImage = user.primary_image_type === 'avatar' || user.primary_image_type === 'last_scrobble'
-    ? imageSources[user.primary_image_type]
-    : user.primary_image_period === 'random'
-      ? (shuffle(PERIOD_VARIANTS[user.primary_image_type]).find((k) => hasRealImage[k]) ?? DEFAULT_IMAGE_URL)
-      : imageSources[`${user.primary_image_type}_${user.primary_image_period}`];
+  const primaryImage = (() => {
+    if (user.primary_image_type === 'avatar' || user.primary_image_type === 'last_scrobble') {
+      return imageSources[user.primary_image_type];
+    }
+    const period = user.primary_image_period === 'cycle'
+      ? CYCLE_PERIODS[user.cycle_index]
+      : user.primary_image_period;
+    return imageSources[`${user.primary_image_type}_${period}`] ?? DEFAULT_IMAGE_URL;
+  })();
 
   const dynamic: DynamicField[] = [
     {
@@ -148,6 +148,10 @@ export async function refreshUserWidget(
   };
 
   await syncWidget(user.discord_id, payload);
+
+  if (user.primary_image_period === 'cycle') {
+    advanceCycleIndex(user.discord_id, (user.cycle_index + 1) % 3);
+  }
 
   const now = new Date().toISOString();
   updateRefresh(user.discord_id, now, JSON.stringify(payload));

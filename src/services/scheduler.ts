@@ -19,8 +19,6 @@ export function startScheduler(): void {
     return;
   }
 
-  void runAutoRefresh();
-
   intervalHandle = setInterval(() => {
     void runAutoRefresh();
   }, AUTO_REFRESH_INTERVAL);

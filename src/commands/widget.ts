@@ -16,6 +16,7 @@ import { getUser, upsertUser, setPrimaryImageConfig } from '../database.js';
 import { refreshUserWidget } from '../services/shared.js';
 import { waitForOAuth } from '../oauth-store.js';
 import type { LastFmService } from '../services/lastfm.js';
+import type { PrimaryImagePeriod } from '../types.js';
 
 const SUCCESS = 0xa6e3a1;
 const ERROR = 0xba0000;
@@ -185,7 +186,7 @@ async function handleSetup(
 function formatConfig(type: string, period?: string): string {
   if (type === 'avatar') return 'Avatar';
   if (type === 'last_scrobble') return 'Last Scrobble';
-  const periodLabel = period === '7d' ? 'Last 7 Days' : period === '30d' ? 'Last 30 Days' : period === 'random' ? 'Random' : 'Overall';
+  const periodLabel = period === '7d' ? 'Last 7 Days' : period === '30d' ? 'Last 30 Days' : period === 'cycle' ? 'Cycle' : 'Overall';
   return `Top ${type.charAt(0).toUpperCase() + type.slice(1)} (${periodLabel})`;
 }
 
@@ -258,9 +259,9 @@ async function handlePrimary(
         .setDescription('Top track/album from the past month')
         .setValue('30d'),
       new StringSelectMenuOptionBuilder()
-        .setLabel('Random')
-        .setDescription('Pick a random image from all periods')
-        .setValue('random'),
+        .setLabel('Cycle')
+        .setDescription('Cycle through periods on each refresh')
+        .setValue('cycle'),
     );
 
   const currentLabel = formatConfig(user.primary_image_type, user.primary_image_period);
@@ -344,7 +345,7 @@ async function handlePrimary(
       }
     } else if (i.customId === 'primary_period' && selectedType) {
       collector.stop();
-      const period = i.values[0] as 'overall' | '7d' | '30d' | 'random';
+      const period = i.values[0] as PrimaryImagePeriod;
       await i.deferUpdate();
 
       setPrimaryImageConfig(interaction.user.id, selectedType as 'artist' | 'track' | 'album', period);
