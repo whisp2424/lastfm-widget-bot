@@ -104,11 +104,10 @@ export function setPrimaryImageConfig(
   stmt.run(type, period, discordId);
 }
 
-export function advanceCycleIndex(discordId: string, index: number): void {
-  const stmt = getDb().prepare(`
-    UPDATE users SET cycle_index = ? WHERE discord_id = ?
-  `);
-  stmt.run(index, discordId);
+export function advanceCycleIndex(discordId: string): void {
+  getDb().prepare(`
+    UPDATE users SET cycle_index = (cycle_index + 1) % 3 WHERE discord_id = ?
+  `).run(discordId);
 }
 
 export function getAllAuthorizedUsers(): UserRow[] {

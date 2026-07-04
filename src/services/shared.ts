@@ -150,7 +150,7 @@ export async function refreshUserWidget(
   await syncWidget(user.discord_id, payload);
 
   if (user.primary_image_period === 'cycle') {
-    advanceCycleIndex(user.discord_id, (user.cycle_index + 1) % 3);
+    advanceCycleIndex(user.discord_id);
   }
 
   const now = new Date().toISOString();
