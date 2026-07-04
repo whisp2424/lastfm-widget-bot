@@ -64,13 +64,13 @@ export class LastFmService {
     };
   }
 
-  async getTopArtist(username: string): Promise<{
+  async getTopArtist(username: string, period: string = 'overall'): Promise<{
     name: string;
     image: string | null;
   }> {
     const data = await this.fetch<{
       topartists: { artist: { name: string; mbid?: string }[] };
-    }>('user.getTopArtists', { user: username, period: 'overall', limit: 1 });
+    }>('user.getTopArtists', { user: username, period, limit: 1 });
     const artist = data.topartists?.artist?.[0];
     if (!artist) return { name: '—', image: null };
 

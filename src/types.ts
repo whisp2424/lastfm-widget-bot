@@ -1,4 +1,5 @@
-export type PrimarySource = 'artist' | 'track' | 'album' | 'avatar';
+export type PrimaryImageType = 'avatar' | 'artist' | 'track' | 'album' | 'last_scrobble' | 'random_artist' | 'random_cover';
+export type PrimaryImagePeriod = 'overall' | '7d' | '30d';
 
 export interface UserRow {
   discord_id: string;
@@ -7,7 +8,8 @@ export interface UserRow {
   access_token: string | null;
   last_refresh_at: string | null;
   cached_data: string | null;
-  primary_source: PrimarySource;
+  primary_image_type: PrimaryImageType;
+  primary_image_period: PrimaryImagePeriod;
 }
 
 export interface DynamicField {

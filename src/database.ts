@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
-import type { UserRow, PrimarySource } from './types.js';
+import type { UserRow, PrimaryImageType, PrimaryImagePeriod } from './types.js';
 
 const DB_PATH = path.join(process.cwd(), 'widget.db');
 
@@ -24,12 +24,18 @@ function initSchema(): void {
       access_token  TEXT,
       last_refresh_at TEXT,
       cached_data   TEXT,
-      primary_source TEXT NOT NULL DEFAULT 'artist'
+      primary_image_type TEXT NOT NULL DEFAULT 'artist',
+      primary_image_period TEXT NOT NULL DEFAULT 'overall'
     )
   `);
 
   try {
-    db.exec(`ALTER TABLE users ADD COLUMN primary_source TEXT NOT NULL DEFAULT 'artist'`);
+    db.exec(`ALTER TABLE users ADD COLUMN primary_image_type TEXT NOT NULL DEFAULT 'artist'`);
+  } catch {
+    // column already exists
+  }
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN primary_image_period TEXT NOT NULL DEFAULT 'overall'`);
   } catch {
     // column already exists
   }
@@ -68,14 +74,15 @@ export function updateRefresh(
   stmt.run(now, cachedData, discordId);
 }
 
-export function setPrimarySource(
+export function setPrimaryImageConfig(
   discordId: string,
-  source: PrimarySource,
+  type: PrimaryImageType,
+  period: PrimaryImagePeriod,
 ): void {
   const stmt = getDb().prepare(`
-    UPDATE users SET primary_source = ? WHERE discord_id = ?
+    UPDATE users SET primary_image_type = ?, primary_image_period = ? WHERE discord_id = ?
   `);
-  stmt.run(source, discordId);
+  stmt.run(type, period, discordId);
 }
 
 export function getAllAuthorizedUsers(): UserRow[] {
