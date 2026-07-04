@@ -16,7 +16,7 @@ import { getUser, upsertUser, setPrimaryImageConfig, deauthorizeUser, setSchedul
 import { refreshUserWidget, CYCLE_PERIODS } from '../services/shared.js';
 import { getNextRefreshIn, AUTO_REFRESH_INTERVAL } from '../services/scheduler.js';
 import { waitForOAuth } from '../oauth-store.js';
-import { isDefaultImage, type LastFmService } from '../services/lastfm.js';
+import type { LastFmService } from '../services/lastfm.js';
 import type { PrimaryImagePeriod, PrimaryImageType, WidgetPayload, UserRow } from '../types.js';
 
 const SUCCESS = 0xa6e3a1;
@@ -348,12 +348,17 @@ async function handleConfig(
     );
 
   const mainEmbed = buildMainConfigEmbed(user);
-  const mainComponents = [
-    new ActionRowBuilder<any>().addComponents(settingsSelect),
-    new ActionRowBuilder<any>().addComponents(reauthBtn, refreshBtn),
-  ];
+  let refreshUsed = false;
 
-  const reply = await interaction.editReply({ embeds: [mainEmbed], components: mainComponents });
+  function getMainComponents(): ActionRowBuilder<any>[] {
+    const btn = refreshUsed ? ButtonBuilder.from(refreshBtn).setDisabled(true) : refreshBtn;
+    return [
+      new ActionRowBuilder<any>().addComponents(settingsSelect),
+      new ActionRowBuilder<any>().addComponents(reauthBtn, btn),
+    ];
+  }
+
+  const reply = await interaction.editReply({ embeds: [mainEmbed], components: getMainComponents() });
 
   let state: 'main' | 'primary_image' = 'main';
   let selectedType: string | null = null;
@@ -395,7 +400,7 @@ async function handleConfig(
         getFreshUser();
         await i.update({
           embeds: [buildMainConfigEmbed(user)],
-          components: mainComponents,
+          components: getMainComponents(),
         });
 
       } else if (i.customId === 'config_refresh') {
@@ -408,13 +413,8 @@ async function handleConfig(
           return;
         }
 
-        const disabledRefreshBtn = ButtonBuilder.from(refreshBtn).setDisabled(true);
-        await interaction.editReply({
-          components: [
-            new ActionRowBuilder<any>().addComponents(settingsSelect),
-            new ActionRowBuilder<any>().addComponents(reauthBtn, disabledRefreshBtn),
-          ],
-        });
+        refreshUsed = true;
+        await interaction.editReply({ components: getMainComponents() });
 
         try {
           await refreshUserWidget(user, lastfmService);
@@ -424,14 +424,14 @@ async function handleConfig(
           if (state === 'main') {
             await interaction.editReply({
               embeds: [buildMainConfigEmbed(user)],
-              components: mainComponents,
+              components: getMainComponents(),
             });
           }
         } catch (err) {
           console.error(`[config] Refresh failed:`, err);
           await interaction.editReply({
             embeds: [buildMainConfigEmbed(user)],
-            components: mainComponents,
+            components: getMainComponents(),
           });
           await interaction.followUp({
             embeds: [new EmbedBuilder().setColor(ERROR).setTitle('Refresh Failed').setDescription('Could not refresh your widget.')],
@@ -463,12 +463,12 @@ async function handleConfig(
           getFreshUser();
           await interaction.editReply({
             embeds: [buildMainConfigEmbed(user)],
-            components: mainComponents,
+            components: getMainComponents(),
           });
         } catch {
           await interaction.editReply({
             embeds: [buildMainConfigEmbed(user)],
-            components: mainComponents,
+            components: getMainComponents(),
           });
         }
 
@@ -488,7 +488,7 @@ async function handleConfig(
           state = 'main';
           await interaction.editReply({
             embeds: [buildMainConfigEmbed(user)],
-            components: mainComponents,
+            components: getMainComponents(),
           });
         } else if (selectedType) {
           await i.update({
@@ -521,7 +521,7 @@ async function handleConfig(
         state = 'main';
         await interaction.editReply({
           embeds: [buildMainConfigEmbed(user)],
-          components: mainComponents,
+          components: getMainComponents(),
         });
       }
     } catch (err) {
@@ -716,11 +716,6 @@ async function handleImage(
   const primaryImageField = gf('primary_image');
   const primaryImageUrl = typeof primaryImageField === 'object' ? primaryImageField.url : null;
 
-  const avatarField = gf('avatar');
-  const avatarUrl = typeof avatarField === 'object' ? avatarField.url : null;
-
-  const effectiveImageUrl = (primaryImageUrl && !isDefaultImage(primaryImageUrl)) ? primaryImageUrl : avatarUrl;
-
   const type = user.primary_image_type;
   const effectivePeriod = user.primary_image_period === 'cycle'
     ? CYCLE_PERIODS[(user.cycle_index - 1 + 3) % 3]
@@ -735,6 +730,13 @@ async function handleImage(
   const trackLink = (track: string, artist: string) => `[${track}](${publicBase}${enc(artist)}/_/${enc(track)})`;
 
   await interaction.deferReply({ ephemeral: false });
+
+  if (!primaryImageUrl) {
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(ERROR).setTitle('No Image Data').setDescription('No primary image data available. Try refreshing your widget first.')],
+    });
+    return;
+  }
 
   const periodLabel = getPeriodLabel(effectivePeriod);
   const typeTitle = type === 'avatar' ? 'Avatar'
@@ -754,7 +756,7 @@ async function handleImage(
         loved: gfs('loved_tracks'),
         since: gfs('scrobbling_since', ''),
       },
-      effectiveImageUrl,
+      primaryImageUrl,
     );
 
     linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -776,7 +778,7 @@ async function handleImage(
         playcount: raw?.playcount ?? 0,
         listeners: raw?.listeners ?? 0,
       },
-      effectiveImageUrl,
+      primaryImageUrl,
       title,
     );
 
@@ -808,7 +810,7 @@ async function handleImage(
         listeners: raw?.listeners ?? 0,
         bio: raw?.bio ?? '',
       },
-      effectiveImageUrl,
+      primaryImageUrl,
       title,
     );
 
@@ -842,7 +844,7 @@ async function handleImage(
         playcount: raw?.playcount ?? 0,
         listeners: raw?.listeners ?? 0,
       },
-      effectiveImageUrl,
+      primaryImageUrl,
       title,
     );
 
@@ -879,7 +881,7 @@ async function handleImage(
         listeners: raw?.listeners ?? 0,
         wiki: raw?.wiki ?? '',
       },
-      effectiveImageUrl,
+      primaryImageUrl,
       title,
     );
 
