@@ -14,6 +14,7 @@ import {
 import { config } from '../config.js';
 import { getUser, upsertUser, setPrimaryImageConfig } from '../database.js';
 import { refreshUserWidget, CYCLE_PERIODS } from '../services/shared.js';
+import { getNextRefreshIn, AUTO_REFRESH_INTERVAL } from '../services/scheduler.js';
 import { waitForOAuth } from '../oauth-store.js';
 import type { LastFmService } from '../services/lastfm.js';
 import type { PrimaryImagePeriod, PrimaryImageType, WidgetPayload, UserRow } from '../types.js';
@@ -211,32 +212,37 @@ function timeAgo(isoString: string): string {
   return `${days}d ago`;
 }
 
-function buildMainConfigEmbed(user: UserRow, payload: WidgetPayload | null): EmbedBuilder {
+function formatTimeLeft(ms: number): string {
+  const minutes = Math.ceil(ms / 60000);
+  if (minutes < 1) return 'less than a minute';
+  if (minutes === 1) return '1 minute';
+  if (minutes < 60) return `${minutes} minutes`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours} hours`;
+}
+
+function buildMainConfigEmbed(user: UserRow): EmbedBuilder {
   const embed = new EmbedBuilder()
     .setColor(INFO)
     .setTitle('Widget Configuration')
-    .setDescription('Manage your Last.fm profile widget settings.');
+    .setDescription(
+      'Configure your Last.fm profile widget. Choose which image takes priority, '
+      + 'manually refresh your stats, or reauthenticate your Discord connection.'
+    );
 
   embed.addFields(
-    { name: 'Last.fm Username', value: user.lastfm_username, inline: true },
+    { name: 'Last.fm Username', value: `**${user.lastfm_username}**`, inline: true },
     { name: 'Primary Image', value: formatConfig(user.primary_image_type, user.primary_image_period), inline: true },
   );
 
   if (user.last_refresh_at) {
-    embed.addFields({ name: 'Last Refreshed', value: timeAgo(user.last_refresh_at), inline: true });
+    embed.addFields({ name: 'Last Refreshed', value: timeAgo(user.last_refresh_at), inline: false });
   }
 
-  if (payload) {
-    const gf = (name: string) => {
-      const f = payload.data.dynamic.find((d) => d.name === name);
-      return f && typeof f.value !== 'object' ? String(f.value) : null;
-    };
-    const scrobbles = gf('total_scrobbles');
-    const artists = gf('total_artists');
-    const loved = gf('loved_tracks');
-    if (scrobbles) embed.addFields({ name: 'Total Scrobbles', value: scrobbles, inline: true });
-    if (artists) embed.addFields({ name: 'Artists', value: artists, inline: true });
-    if (loved) embed.addFields({ name: 'Loved Tracks', value: loved, inline: true });
+  const nextIn = getNextRefreshIn();
+  if (nextIn !== null) {
+    embed.addFields({ name: 'Next Auto-Refresh', value: `~${formatTimeLeft(nextIn)}`, inline: false });
   }
 
   return embed;
@@ -265,13 +271,10 @@ async function handleConfig(
 
   await interaction.deferReply({ ephemeral: true });
 
-  let payload: WidgetPayload | null = null;
-  try { if (user.cached_data) payload = JSON.parse(user.cached_data); } catch {}
-
   const refreshBtn = new ButtonBuilder()
     .setCustomId('config_refresh')
     .setLabel('Refresh')
-    .setStyle(ButtonStyle.Success);
+    .setStyle(ButtonStyle.Secondary);
 
   const reauthBtn = new ButtonBuilder()
     .setCustomId('config_reauth')
@@ -314,10 +317,10 @@ async function handleConfig(
       new StringSelectMenuOptionBuilder().setLabel('Cycle').setDescription('Cycle through periods on each refresh').setValue('cycle'),
     );
 
-  const mainEmbed = buildMainConfigEmbed(user, payload);
+  const mainEmbed = buildMainConfigEmbed(user);
   const mainComponents = [
     new ActionRowBuilder<any>().addComponents(settingsSelect),
-    new ActionRowBuilder<any>().addComponents(refreshBtn, reauthBtn),
+    new ActionRowBuilder<any>().addComponents(reauthBtn, refreshBtn),
   ];
 
   const reply = await interaction.editReply({ embeds: [mainEmbed], components: mainComponents });
@@ -328,10 +331,6 @@ async function handleConfig(
   function getFreshUser(): void {
     const fresh = getUser(interaction.user.id);
     if (fresh) user = fresh;
-  }
-
-  function parsePayload(): WidgetPayload | null {
-    try { return user.cached_data ? JSON.parse(user.cached_data) : null; } catch { return null; }
   }
 
   const collector = reply.createMessageComponentCollector({
@@ -365,7 +364,7 @@ async function handleConfig(
         state = 'main';
         getFreshUser();
         await i.update({
-          embeds: [buildMainConfigEmbed(user, parsePayload())],
+          embeds: [buildMainConfigEmbed(user)],
           components: mainComponents,
         });
 
@@ -383,7 +382,7 @@ async function handleConfig(
           getFreshUser();
           if (state === 'main') {
             await interaction.editReply({
-              embeds: [buildMainConfigEmbed(user, parsePayload())],
+              embeds: [buildMainConfigEmbed(user)],
               components: mainComponents,
             });
           }
@@ -418,12 +417,12 @@ async function handleConfig(
           await waitForOAuth(interaction.user.id, 5 * 60 * 1000);
           getFreshUser();
           await interaction.editReply({
-            embeds: [buildMainConfigEmbed(user, parsePayload())],
+            embeds: [buildMainConfigEmbed(user)],
             components: mainComponents,
           });
         } catch {
           await interaction.editReply({
-            embeds: [buildMainConfigEmbed(user, payload)],
+            embeds: [buildMainConfigEmbed(user)],
             components: mainComponents,
           });
         }
@@ -443,7 +442,7 @@ async function handleConfig(
           getFreshUser();
           state = 'main';
           await interaction.editReply({
-            embeds: [buildMainConfigEmbed(user, parsePayload())],
+            embeds: [buildMainConfigEmbed(user)],
             components: mainComponents,
           });
         } else if (selectedType) {
@@ -476,7 +475,7 @@ async function handleConfig(
         getFreshUser();
         state = 'main';
         await interaction.editReply({
-          embeds: [buildMainConfigEmbed(user, parsePayload())],
+          embeds: [buildMainConfigEmbed(user)],
           components: mainComponents,
         });
       }

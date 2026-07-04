@@ -7,6 +7,7 @@ const DELAY_BETWEEN_USERS_MS = 2_000;
 
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
 let lastfmService: LastFmService | null = null;
+let startedAt: number | null = null;
 
 export function initScheduler(svc: LastFmService): void {
   lastfmService = svc;
@@ -19,10 +20,19 @@ export function startScheduler(): void {
     return;
   }
 
+  startedAt = Date.now();
   intervalHandle = setInterval(() => {
     void runAutoRefresh();
   }, AUTO_REFRESH_INTERVAL);
 }
+
+export function getNextRefreshIn(): number | null {
+  if (startedAt === null) return null;
+  const elapsed = Date.now() - startedAt;
+  return AUTO_REFRESH_INTERVAL - (elapsed % AUTO_REFRESH_INTERVAL);
+}
+
+export { AUTO_REFRESH_INTERVAL };
 
 export function stopScheduler(): void {
   if (intervalHandle) {
