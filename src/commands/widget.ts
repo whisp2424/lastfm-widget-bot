@@ -21,7 +21,7 @@ import type { PrimaryImagePeriod, WidgetPayload } from '../types.js';
 const SUCCESS = 0xa6e3a1;
 const ERROR = 0xba0000;
 const INFO = 0xba0000;
-const ACCENT = 0x5865F2;
+const ACCENT = 0xD91C00;
 
 export const widgetCommand = {
   builder: new SlashCommandBuilder()
@@ -228,23 +228,28 @@ async function handleConfig(
       new StringSelectMenuOptionBuilder()
         .setLabel('Avatar')
         .setDescription('Show your Last.fm avatar')
-        .setValue('avatar'),
+        .setValue('avatar')
+        .setEmoji('👤'),
       new StringSelectMenuOptionBuilder()
         .setLabel('Top Artist')
         .setDescription('Show your top artist image')
-        .setValue('artist'),
+        .setValue('artist')
+        .setEmoji('🎤'),
       new StringSelectMenuOptionBuilder()
         .setLabel('Top Track')
         .setDescription('Show your top track album cover')
-        .setValue('track'),
+        .setValue('track')
+        .setEmoji('🎵'),
       new StringSelectMenuOptionBuilder()
         .setLabel('Top Album')
         .setDescription('Show your top album cover')
-        .setValue('album'),
+        .setValue('album')
+        .setEmoji('💿'),
       new StringSelectMenuOptionBuilder()
         .setLabel('Last Scrobble')
         .setDescription('Show the cover of your most recent scrobble')
-        .setValue('last_scrobble'),
+        .setValue('last_scrobble')
+        .setEmoji('🔄'),
     );
 
   const periodSelect = new StringSelectMenuBuilder()
@@ -635,7 +640,7 @@ async function handleImage(
 
     linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View on Last.fm').setURL(trackUrl),
-      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('In your library').setURL(`${userUrl}/library/music/${enc(recent.artist)}/_/${enc(recent.name)}`),
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(`View in ${user.lastfm_username}'s Library`).setURL(`${userUrl}/library/music/${enc(recent.artist)}/_/${enc(recent.name)}`),
     );
 
   } else if (type === 'artist') {
@@ -658,7 +663,7 @@ async function handleImage(
 
     linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View on Last.fm').setURL(`${publicBase}${enc(name)}`),
-      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('In your library').setURL(`${userUrl}/library/music/${enc(name)}`),
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(`View in ${user.lastfm_username}'s Library`).setURL(`${userUrl}/library/music/${enc(name)}`),
     );
 
   } else if (type === 'track') {
@@ -687,7 +692,7 @@ async function handleImage(
 
     linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View on Last.fm').setURL(trackUrl),
-      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('In your library').setURL(`${userUrl}/library/music/${enc(trackArtist)}/_/${enc(trackName)}`),
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(`View in ${user.lastfm_username}'s Library`).setURL(`${userUrl}/library/music/${enc(trackArtist)}/_/${enc(trackName)}`),
     );
 
   } else if (type === 'album') {
@@ -716,7 +721,7 @@ async function handleImage(
 
     linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View on Last.fm').setURL(albumUrl),
-      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('In your library').setURL(`${userUrl}/library/music/${enc(albumArtist)}/${enc(albumName)}`),
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(`View in ${user.lastfm_username}'s Library`).setURL(`${userUrl}/library/music/${enc(albumArtist)}/${enc(albumName)}`),
     );
   } else {
     await interaction.editReply({
@@ -726,11 +731,11 @@ async function handleImage(
   }
 
   const customizeRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('img_customize').setLabel('Customize').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('img_customize').setLabel('Customize').setStyle(ButtonStyle.Primary),
   );
   if (user.primary_image_period === 'cycle' && (type === 'artist' || type === 'track' || type === 'album')) {
     customizeRow.addComponents(
-      new ButtonBuilder().setCustomId('img_cycle').setLabel('Cycle Now').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('img_cycle').setLabel('Cycle Now').setStyle(ButtonStyle.Success),
     );
   }
 
