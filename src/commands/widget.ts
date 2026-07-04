@@ -185,9 +185,7 @@ async function handleSetup(
 function formatConfig(type: string, period?: string): string {
   if (type === 'avatar') return 'Avatar';
   if (type === 'last_scrobble') return 'Last Scrobble';
-  if (type === 'random_artist') return 'Random Artist';
-  if (type === 'random_cover') return 'Random Cover';
-  const periodLabel = period === '7d' ? 'Last 7 Days' : period === '30d' ? 'Last 30 Days' : 'Overall';
+  const periodLabel = period === '7d' ? 'Last 7 Days' : period === '30d' ? 'Last 30 Days' : period === 'random' ? 'Random' : 'Overall';
   return `Top ${type.charAt(0).toUpperCase() + type.slice(1)} (${periodLabel})`;
 }
 
@@ -241,16 +239,6 @@ async function handlePrimary(
         .setDescription('Show the cover of your most recent scrobble')
         .setValue('last_scrobble')
         .setEmoji('🔄'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Random Artist')
-        .setDescription('Pick a random artist or album image')
-        .setValue('random_artist')
-        .setEmoji('🎲'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Random Cover')
-        .setDescription('Pick a random track or scrobble cover')
-        .setValue('random_cover')
-        .setEmoji('🎴'),
     );
 
   const periodSelect = new StringSelectMenuBuilder()
@@ -269,6 +257,10 @@ async function handlePrimary(
         .setLabel('Last 30 Days')
         .setDescription('Top track/album from the past month')
         .setValue('30d'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Random')
+        .setDescription('Pick a random image from all periods')
+        .setValue('random'),
     );
 
   const currentLabel = formatConfig(user.primary_image_type, user.primary_image_period);
@@ -302,12 +294,12 @@ async function handlePrimary(
     if (i.customId === 'primary_type') {
       selectedType = i.values[0];
 
-      if (selectedType === 'avatar' || selectedType === 'last_scrobble' || selectedType === 'random_artist' || selectedType === 'random_cover') {
+      if (selectedType === 'avatar' || selectedType === 'last_scrobble') {
         collector.stop();
         await i.deferUpdate();
 
-        setPrimaryImageConfig(interaction.user.id, selectedType as 'avatar' | 'last_scrobble' | 'random_artist' | 'random_cover', 'overall');
-        user.primary_image_type = selectedType as 'avatar' | 'last_scrobble' | 'random_artist' | 'random_cover';
+        setPrimaryImageConfig(interaction.user.id, selectedType as 'avatar' | 'last_scrobble', 'overall');
+        user.primary_image_type = selectedType as 'avatar' | 'last_scrobble';
         user.primary_image_period = 'overall';
 
         try {
@@ -352,11 +344,11 @@ async function handlePrimary(
       }
     } else if (i.customId === 'primary_period' && selectedType) {
       collector.stop();
-      const period = i.values[0] as 'overall' | '7d' | '30d';
+      const period = i.values[0] as 'overall' | '7d' | '30d' | 'random';
       await i.deferUpdate();
 
-      setPrimaryImageConfig(interaction.user.id, selectedType as 'avatar' | 'artist' | 'track' | 'album' | 'last_scrobble' | 'random_artist' | 'random_cover', period);
-      user.primary_image_type = selectedType as 'avatar' | 'artist' | 'track' | 'album' | 'last_scrobble' | 'random_artist' | 'random_cover';
+      setPrimaryImageConfig(interaction.user.id, selectedType as 'artist' | 'track' | 'album', period);
+      user.primary_image_type = selectedType as 'artist' | 'track' | 'album';
       user.primary_image_period = period;
 
       try {

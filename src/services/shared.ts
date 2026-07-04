@@ -28,7 +28,11 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-const NO_PERIOD = new Set(['avatar', 'last_scrobble', 'random_artist', 'random_cover']);
+const PERIOD_VARIANTS: Record<string, string[]> = {
+  artist: ['artist_overall', 'artist_7d', 'artist_30d'],
+  track: ['track_overall', 'track_7d', 'track_30d'],
+  album: ['album_overall', 'album_7d', 'album_30d'],
+};
 
 export async function refreshUserWidget(
   user: UserRow,
@@ -97,16 +101,11 @@ export async function refreshUserWidget(
     last_scrobble: !isDefaultImage(recentTrack.cover),
   };
 
-  const randomArtistPool = ['artist_overall', 'artist_7d', 'artist_30d', 'album_overall', 'album_7d', 'album_30d'];
-  const randomCoverPool = ['track_overall', 'track_7d', 'track_30d', 'last_scrobble'];
-
-  const primaryImage = user.primary_image_type === 'random_artist'
-    ? (shuffle(randomArtistPool).find((k) => hasRealImage[k]) ?? DEFAULT_IMAGE_URL)
-    : user.primary_image_type === 'random_cover'
-      ? (shuffle(randomCoverPool).find((k) => hasRealImage[k]) ?? DEFAULT_IMAGE_URL)
-      : imageSources[NO_PERIOD.has(user.primary_image_type)
-        ? user.primary_image_type
-        : `${user.primary_image_type}_${user.primary_image_period}`];
+  const primaryImage = user.primary_image_type === 'avatar' || user.primary_image_type === 'last_scrobble'
+    ? imageSources[user.primary_image_type]
+    : user.primary_image_period === 'random'
+      ? (shuffle(PERIOD_VARIANTS[user.primary_image_type]).find((k) => hasRealImage[k]) ?? DEFAULT_IMAGE_URL)
+      : imageSources[`${user.primary_image_type}_${user.primary_image_period}`];
 
   const dynamic: DynamicField[] = [
     {

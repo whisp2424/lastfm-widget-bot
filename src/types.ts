@@ -1,5 +1,5 @@
-export type PrimaryImageType = 'avatar' | 'artist' | 'track' | 'album' | 'last_scrobble' | 'random_artist' | 'random_cover';
-export type PrimaryImagePeriod = 'overall' | '7d' | '30d';
+export type PrimaryImageType = 'avatar' | 'artist' | 'track' | 'album' | 'last_scrobble';
+export type PrimaryImagePeriod = 'overall' | '7d' | '30d' | 'random';
 
 export interface UserRow {
   discord_id: string;
