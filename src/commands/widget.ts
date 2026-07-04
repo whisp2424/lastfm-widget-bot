@@ -419,7 +419,7 @@ function getField(
 
 function buildArtistEmbed(
   name: string,
-  info: { tags: string[]; similar: string[]; playcount: number; listeners: number; bio: string },
+  info: { tags: string; similar: string; playcount: number; listeners: number; bio: string },
   imageUrl: string | null,
   title: string,
 ): EmbedBuilder {
@@ -429,8 +429,8 @@ function buildArtistEmbed(
     .setDescription(`**${name}**`)
     .setThumbnail(imageUrl);
 
-  if (info.tags.length > 0) {
-    embed.addFields({ name: 'Tags', value: info.tags.slice(0, 8).join(', '), inline: false });
+  if (info.tags) {
+    embed.addFields({ name: 'Tags', value: info.tags, inline: false });
   }
 
   embed.addFields(
@@ -438,8 +438,8 @@ function buildArtistEmbed(
     { name: 'Listeners', value: info.listeners.toLocaleString(), inline: true },
   );
 
-  if (info.similar.length > 0) {
-    embed.addFields({ name: 'Similar Artists', value: info.similar.slice(0, 5).join(', '), inline: false });
+  if (info.similar) {
+    embed.addFields({ name: 'Similar Artists', value: info.similar, inline: false });
   }
 
   if (info.bio) {
@@ -453,7 +453,7 @@ function buildArtistEmbed(
 function buildAlbumEmbed(
   name: string,
   artist: string,
-  info: { tags: string[]; tracks: string[]; releaseDate: string; playcount: number; listeners: number; wiki: string },
+  info: { tags: string; tracks: string; releaseDate: string; playcount: number; listeners: number; wiki: string },
   imageUrl: string | null,
   title: string,
 ): EmbedBuilder {
@@ -472,13 +472,12 @@ function buildAlbumEmbed(
     embed.addFields({ name: 'Release Date', value: info.releaseDate, inline: true });
   }
 
-  if (info.tracks.length > 0) {
-    const trackList = info.tracks.slice(0, 10).join(', ');
-    embed.addFields({ name: `Tracks (${info.tracks.length})`, value: trackList, inline: false });
+  if (info.tracks) {
+    embed.addFields({ name: `Tracks`, value: info.tracks, inline: false });
   }
 
-  if (info.tags.length > 0) {
-    embed.addFields({ name: 'Tags', value: info.tags.slice(0, 8).join(', '), inline: false });
+  if (info.tags) {
+    embed.addFields({ name: 'Tags', value: info.tags, inline: false });
   }
 
   if (info.wiki) {
@@ -492,7 +491,7 @@ function buildAlbumEmbed(
 function buildTrackEmbed(
   name: string,
   artist: string,
-  info: { tags: string[]; album: string; duration: number; playcount: number; listeners: number },
+  info: { tags: string; album: string; duration: number; playcount: number; listeners: number },
   coverUrl: string | null,
   title: string,
 ): EmbedBuilder {
@@ -517,8 +516,8 @@ function buildTrackEmbed(
     { name: 'Listeners', value: info.listeners.toLocaleString(), inline: true },
   );
 
-  if (info.tags.length > 0) {
-    embed.addFields({ name: 'Tags', value: info.tags.slice(0, 8).join(', '), inline: false });
+  if (info.tags) {
+    embed.addFields({ name: 'Tags', value: info.tags, inline: false });
   }
 
   return embed;
@@ -597,7 +596,11 @@ async function handleImage(
 
   const userUrl = `https://www.last.fm/user/${encodeURIComponent(user.lastfm_username)}`;
   const publicBase = 'https://www.last.fm/music/';
+  const tagBase = 'https://www.last.fm/tag/';
   const enc = (s: string) => encodeURIComponent(s);
+  const tagLink = (t: string) => `[${t}](${tagBase}${enc(t)})`;
+  const artistLink = (n: string) => `[${n}](${publicBase}${enc(n)})`;
+  const trackLink = (track: string, artist: string) => `[${track}](${publicBase}${enc(artist)}/_/${enc(track)})`;
 
   await interaction.deferReply({ ephemeral: false });
 
@@ -609,7 +612,6 @@ async function handleImage(
 
   let embed: EmbedBuilder;
   let linkButtons: ActionRowBuilder<ButtonBuilder>;
-  let extraButtons: ActionRowBuilder<ButtonBuilder> | null = null;
 
   if (type === 'avatar') {
     embed = buildAvatarEmbed(
@@ -630,12 +632,18 @@ async function handleImage(
 
   } else if (type === 'last_scrobble') {
     const recent = await lastfmService.getRecentTrack(user.lastfm_username);
-    const trackInfo = await lastfmService.getTrackInfo(recent.artist, recent.name).catch(() => null);
+    const raw = await lastfmService.getTrackInfo(recent.artist, recent.name).catch(() => null);
 
     embed = buildTrackEmbed(
       recent.name,
       recent.artist,
-      trackInfo ?? { tags: [], album: '', duration: 0, playcount: 0, listeners: 0 },
+      {
+        tags: raw?.tags?.length ? raw.tags.slice(0, 8).map(tagLink).join(', ') : '',
+        album: raw?.album ?? '',
+        duration: raw?.duration ?? 0,
+        playcount: raw?.playcount ?? 0,
+        listeners: raw?.listeners ?? 0,
+      },
       recent.cover ?? primaryImageUrl,
       title,
     );
@@ -657,10 +665,17 @@ async function handleImage(
       return;
     }
 
-    const info = await lastfmService.getArtistInfo(name).catch(() => null);
+    const raw = await lastfmService.getArtistInfo(name).catch(() => null);
+
     embed = buildArtistEmbed(
       name,
-      info ?? { tags: [], similar: [], playcount: 0, listeners: 0, bio: '' },
+      {
+        tags: raw?.tags?.length ? raw.tags.slice(0, 8).map(tagLink).join(', ') : '',
+        similar: raw?.similar?.length ? raw.similar.slice(0, 5).map(artistLink).join(', ') : '',
+        playcount: raw?.playcount ?? 0,
+        listeners: raw?.listeners ?? 0,
+        bio: raw?.bio ?? '',
+      },
       primaryImageUrl,
       title,
     );
@@ -683,11 +698,18 @@ async function handleImage(
       return;
     }
 
-    const info = await lastfmService.getTrackInfo(trackArtist, trackName).catch(() => null);
+    const raw = await lastfmService.getTrackInfo(trackArtist, trackName).catch(() => null);
+
     embed = buildTrackEmbed(
       trackName,
       trackArtist,
-      info ?? { tags: [], album: '', duration: 0, playcount: 0, listeners: 0 },
+      {
+        tags: raw?.tags?.length ? raw.tags.slice(0, 8).map(tagLink).join(', ') : '',
+        album: raw?.album ?? '',
+        duration: raw?.duration ?? 0,
+        playcount: raw?.playcount ?? 0,
+        listeners: raw?.listeners ?? 0,
+      },
       primaryImageUrl,
       title,
     );
@@ -712,11 +734,19 @@ async function handleImage(
       return;
     }
 
-    const info = await lastfmService.getAlbumInfo(albumArtist, albumName).catch(() => null);
+    const raw = await lastfmService.getAlbumInfo(albumArtist, albumName).catch(() => null);
+
     embed = buildAlbumEmbed(
       albumName,
       albumArtist,
-      info ?? { tags: [], tracks: [], releaseDate: '', playcount: 0, listeners: 0, wiki: '' },
+      {
+        tags: raw?.tags?.length ? raw.tags.slice(0, 8).map(tagLink).join(', ') : '',
+        tracks: raw?.tracks?.length ? raw.tracks.slice(0, 10).map((t) => trackLink(t, albumArtist)).join(', ') : '',
+        releaseDate: raw?.releaseDate ?? '',
+        playcount: raw?.playcount ?? 0,
+        listeners: raw?.listeners ?? 0,
+        wiki: raw?.wiki ?? '',
+      },
       primaryImageUrl,
       title,
     );
@@ -734,71 +764,7 @@ async function handleImage(
     return;
   }
 
-  const customizeRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('img_customize').setLabel('Customize').setStyle(ButtonStyle.Secondary),
-  );
-  if (user.primary_image_period === 'cycle' && (type === 'artist' || type === 'track' || type === 'album')) {
-    customizeRow.addComponents(
-      new ButtonBuilder().setCustomId('img_cycle').setLabel('Cycle Now').setStyle(ButtonStyle.Secondary),
-    );
-  }
-
-  const components: ActionRowBuilder<ButtonBuilder>[] = [linkButtons];
-  components.push(customizeRow);
-
-  const reply = await interaction.editReply({ embeds: [embed], components });
-
-  const collector = reply.createMessageComponentCollector({
-    componentType: ComponentType.Button,
-    filter: (i) =>
-      (i.customId === 'img_customize' || i.customId === 'img_cycle') &&
-      i.user.id === interaction.user.id,
-    time: 120_000,
-    max: 1,
-  });
-
-  collector.on('collect', async (i) => {
-    if (i.customId === 'img_customize') {
-      await i.deferUpdate();
-      await interaction.followUp({
-        embeds: [
-          new EmbedBuilder()
-            .setColor(INFO)
-            .setTitle('Customize Primary Image')
-            .setDescription('Use `/widget config` to change your primary image type or time period.'),
-        ],
-        ephemeral: true,
-      });
-    } else if (i.customId === 'img_cycle') {
-      await i.deferUpdate();
-      const freshUser = getUser(interaction.user.id);
-      if (freshUser) {
-        try {
-          await refreshUserWidget(freshUser, lastfmService);
-          await interaction.followUp({
-            embeds: [
-              new EmbedBuilder()
-                .setColor(SUCCESS)
-                .setTitle('Cycle Advanced')
-                .setDescription(`Widget cycled to the next period. Run \`/widget image\` to see the updated details.`),
-            ],
-            ephemeral: true,
-          });
-        } catch (err) {
-          console.error(`[image] Cycle refresh failed for ${interaction.user.id}:`, err);
-          await interaction.followUp({
-            embeds: [
-              new EmbedBuilder()
-                .setColor(ERROR)
-                .setTitle('Cycle Failed')
-                .setDescription('Could not advance the cycle. Please try again later.'),
-            ],
-            ephemeral: true,
-          });
-        }
-      }
-    }
-  });
+  await interaction.editReply({ embeds: [embed], components: [linkButtons] });
 }
 
 async function handleRefresh(
