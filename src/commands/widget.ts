@@ -406,6 +406,10 @@ function getPeriodLabel(period: string): string {
   return period;
 }
 
+function possessive(name: string): string {
+  return name.endsWith('s') || name.endsWith('S') ? `${name}'` : `${name}'s`;
+}
+
 function getField(
   dynamic: WidgetPayload['data']['dynamic'],
   name: string,
@@ -640,7 +644,7 @@ async function handleImage(
 
     linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View on Last.fm').setURL(trackUrl),
-      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(`View in ${user.lastfm_username}'s Library`).setURL(`${userUrl}/library/music/${enc(recent.artist)}/_/${enc(recent.name)}`),
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(`View in ${possessive(user.lastfm_username)} Library`).setURL(`${userUrl}/library/music/${enc(recent.artist)}/_/${enc(recent.name)}`),
     );
 
   } else if (type === 'artist') {
@@ -663,7 +667,7 @@ async function handleImage(
 
     linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View on Last.fm').setURL(`${publicBase}${enc(name)}`),
-      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(`View in ${user.lastfm_username}'s Library`).setURL(`${userUrl}/library/music/${enc(name)}`),
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(`View in ${possessive(user.lastfm_username)} Library`).setURL(`${userUrl}/library/music/${enc(name)}`),
     );
 
   } else if (type === 'track') {
@@ -692,7 +696,7 @@ async function handleImage(
 
     linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View on Last.fm').setURL(trackUrl),
-      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(`View in ${user.lastfm_username}'s Library`).setURL(`${userUrl}/library/music/${enc(trackArtist)}/_/${enc(trackName)}`),
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(`View in ${possessive(user.lastfm_username)} Library`).setURL(`${userUrl}/library/music/${enc(trackArtist)}/_/${enc(trackName)}`),
     );
 
   } else if (type === 'album') {
@@ -721,7 +725,7 @@ async function handleImage(
 
     linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View on Last.fm').setURL(albumUrl),
-      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(`View in ${user.lastfm_username}'s Library`).setURL(`${userUrl}/library/music/${enc(albumArtist)}/${enc(albumName)}`),
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(`View in ${possessive(user.lastfm_username)} Library`).setURL(`${userUrl}/library/music/${enc(albumArtist)}/${enc(albumName)}`),
     );
   } else {
     await interaction.editReply({
