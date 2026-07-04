@@ -1,43 +1,58 @@
-import { getAllAuthorizedUsers } from '../database.js';
+import { getAllAuthorizedUsers, getSchedulerNextRefresh, setSchedulerNextRefresh } from '../database.js';
 import { refreshUserWidget } from './shared.js';
 import type { LastFmService } from './lastfm.js';
 
 const AUTO_REFRESH_INTERVAL = 1_800_000;
 const DELAY_BETWEEN_USERS_MS = 2_000;
 
-let intervalHandle: ReturnType<typeof setInterval> | null = null;
+let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
 let lastfmService: LastFmService | null = null;
-let startedAt: number | null = null;
 
 export function initScheduler(svc: LastFmService): void {
   lastfmService = svc;
 }
 
 export function startScheduler(): void {
-  if (intervalHandle) return;
+  if (timeoutHandle) return;
   if (!lastfmService) {
     console.warn('[scheduler] LastFmService not initialized yet');
     return;
   }
 
-  startedAt = Date.now();
-  intervalHandle = setInterval(() => {
+  scheduleNext();
+}
+
+function scheduleNext(): void {
+  let nextRefreshAt = getSchedulerNextRefresh();
+  const now = Date.now();
+
+  if (nextRefreshAt === null || nextRefreshAt <= now) {
+    nextRefreshAt = now + AUTO_REFRESH_INTERVAL;
+    setSchedulerNextRefresh(new Date(nextRefreshAt).toISOString());
+  }
+
+  const delay = nextRefreshAt - now;
+
+  timeoutHandle = setTimeout(() => {
     void runAutoRefresh();
-  }, AUTO_REFRESH_INTERVAL);
+    const next = Date.now() + AUTO_REFRESH_INTERVAL;
+    setSchedulerNextRefresh(new Date(next).toISOString());
+    scheduleNext();
+  }, delay);
 }
 
 export function getNextRefreshIn(): number | null {
-  if (startedAt === null) return null;
-  const elapsed = Date.now() - startedAt;
-  return AUTO_REFRESH_INTERVAL - (elapsed % AUTO_REFRESH_INTERVAL);
+  const nextRefreshAt = getSchedulerNextRefresh();
+  if (nextRefreshAt === null) return null;
+  return Math.max(0, nextRefreshAt - Date.now());
 }
 
 export { AUTO_REFRESH_INTERVAL };
 
 export function stopScheduler(): void {
-  if (intervalHandle) {
-    clearInterval(intervalHandle);
-    intervalHandle = null;
+  if (timeoutHandle) {
+    clearTimeout(timeoutHandle);
+    timeoutHandle = null;
   }
 }
 

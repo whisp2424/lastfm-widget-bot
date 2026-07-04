@@ -14,7 +14,7 @@ import {
 import { config } from '../config.js';
 import { getUser, upsertUser, setPrimaryImageConfig } from '../database.js';
 import { refreshUserWidget, CYCLE_PERIODS } from '../services/shared.js';
-import { getNextRefreshIn, AUTO_REFRESH_INTERVAL } from '../services/scheduler.js';
+import { getNextRefreshIn } from '../services/scheduler.js';
 import { waitForOAuth } from '../oauth-store.js';
 import type { LastFmService } from '../services/lastfm.js';
 import type { PrimaryImagePeriod, PrimaryImageType, WidgetPayload, UserRow } from '../types.js';
@@ -227,23 +227,22 @@ function buildMainConfigEmbed(user: UserRow): EmbedBuilder {
     .setColor(INFO)
     .setTitle('Widget Configuration')
     .setDescription(
-      'Configure your Last.fm profile widget. Choose which image takes priority, '
-      + 'manually refresh your stats, or reauthenticate your Discord connection.'
+      'Synchronize your Last.fm profile widget with your listening data.'
     );
 
-  embed.addFields(
-    { name: 'Last.fm Username', value: `**${user.lastfm_username}**`, inline: true },
-    { name: 'Primary Image', value: formatConfig(user.primary_image_type, user.primary_image_period), inline: true },
-  );
-
   if (user.last_refresh_at) {
-    embed.addFields({ name: 'Last Refreshed', value: timeAgo(user.last_refresh_at), inline: false });
+    embed.addFields({ name: 'Last Refreshed', value: timeAgo(user.last_refresh_at), inline: true });
   }
 
   const nextIn = getNextRefreshIn();
   if (nextIn !== null) {
-    embed.addFields({ name: 'Next Auto-Refresh', value: `~${formatTimeLeft(nextIn)}`, inline: false });
+    embed.addFields({ name: 'Next Auto-Refresh', value: formatTimeLeft(nextIn), inline: true });
   }
+
+  embed.addFields(
+    { name: 'Primary Image', value: formatConfig(user.primary_image_type, user.primary_image_period), inline: true },
+    { name: 'Last.fm Username', value: `**${user.lastfm_username}**`, inline: true },
+  );
 
   return embed;
 }

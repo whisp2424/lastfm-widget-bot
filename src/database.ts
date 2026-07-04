@@ -30,6 +30,13 @@ function initSchema(): void {
     )
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS scheduler (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      next_refresh_at TEXT NOT NULL
+    )
+  `);
+
   try {
     db.exec(`ALTER TABLE users ADD COLUMN primary_image_type TEXT NOT NULL DEFAULT 'artist'`);
   } catch {
@@ -101,4 +108,18 @@ export function advanceCycleIndex(discordId: string, index: number): void {
 export function getAllAuthorizedUsers(): UserRow[] {
   const stmt = getDb().prepare('SELECT * FROM users WHERE authorized = 1');
   return stmt.all() as UserRow[];
+}
+
+export function getSchedulerNextRefresh(): number | null {
+  const row = getDb().prepare('SELECT next_refresh_at FROM scheduler WHERE id = 1').get() as { next_refresh_at: string } | undefined;
+  if (!row) return null;
+  const ts = Date.parse(row.next_refresh_at);
+  return isNaN(ts) ? null : ts;
+}
+
+export function setSchedulerNextRefresh(isoString: string): void {
+  getDb().prepare(`
+    INSERT INTO scheduler (id, next_refresh_at) VALUES (1, ?)
+    ON CONFLICT(id) DO UPDATE SET next_refresh_at = excluded.next_refresh_at
+  `).run(isoString);
 }
