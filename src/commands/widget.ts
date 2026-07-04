@@ -227,7 +227,7 @@ function buildMainConfigEmbed(user: UserRow): EmbedBuilder {
     .setColor(INFO)
     .setTitle('Widget Configuration')
     .setDescription(
-      'Synchronize your Last.fm profile widget with your listening data.'
+      `Currently linked to **${user.lastfm_username}**`
     );
 
   if (user.last_refresh_at) {
@@ -241,7 +241,6 @@ function buildMainConfigEmbed(user: UserRow): EmbedBuilder {
 
   embed.addFields(
     { name: 'Primary Image', value: formatConfig(user.primary_image_type, user.primary_image_period), inline: true },
-    { name: 'Last.fm Username', value: `**${user.lastfm_username}**`, inline: true },
   );
 
   return embed;
@@ -310,10 +309,10 @@ async function handleConfig(
     .setCustomId('primary_period')
     .setPlaceholder('Choose a time period...')
     .addOptions(
-      new StringSelectMenuOptionBuilder().setLabel('Overall').setDescription('All-time top track/album').setValue('overall'),
-      new StringSelectMenuOptionBuilder().setLabel('Last 7 Days').setDescription('Top track/album from the past week').setValue('7d'),
-      new StringSelectMenuOptionBuilder().setLabel('Last 30 Days').setDescription('Top track/album from the past month').setValue('30d'),
-      new StringSelectMenuOptionBuilder().setLabel('Cycle').setDescription('Cycle through periods on each refresh').setValue('cycle'),
+      new StringSelectMenuOptionBuilder().setLabel('Overall').setDescription('All-time top track/album').setValue('overall').setEmoji('🏆'),
+      new StringSelectMenuOptionBuilder().setLabel('Last 7 Days').setDescription('Top track/album from the past week').setValue('7d').setEmoji('📅'),
+      new StringSelectMenuOptionBuilder().setLabel('Last 30 Days').setDescription('Top track/album from the past month').setValue('30d').setEmoji('📆'),
+      new StringSelectMenuOptionBuilder().setLabel('Cycle').setDescription('Cycle through periods on each refresh').setValue('cycle').setEmoji('🔄'),
     );
 
   const mainEmbed = buildMainConfigEmbed(user);
