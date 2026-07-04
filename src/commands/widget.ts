@@ -16,7 +16,7 @@ import { getUser, upsertUser, setPrimaryImageConfig } from '../database.js';
 import { refreshUserWidget, CYCLE_PERIODS } from '../services/shared.js';
 import { waitForOAuth } from '../oauth-store.js';
 import type { LastFmService } from '../services/lastfm.js';
-import type { PrimaryImagePeriod, WidgetPayload } from '../types.js';
+import type { PrimaryImagePeriod, PrimaryImageType, WidgetPayload, UserRow } from '../types.js';
 
 const SUCCESS = 0xa6e3a1;
 const ERROR = 0xba0000;
@@ -200,202 +200,293 @@ function formatConfig(type: string, period?: string): string {
   return `Top ${type.charAt(0).toUpperCase() + type.slice(1)} (${periodLabel})`;
 }
 
+function timeAgo(isoString: string): string {
+  const diff = Date.now() - new Date(isoString).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+function buildMainConfigEmbed(user: UserRow, payload: WidgetPayload | null): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setColor(INFO)
+    .setTitle('Widget Configuration')
+    .setDescription('Manage your Last.fm profile widget settings.');
+
+  embed.addFields(
+    { name: 'Last.fm Username', value: user.lastfm_username, inline: true },
+    { name: 'Primary Image', value: formatConfig(user.primary_image_type, user.primary_image_period), inline: true },
+  );
+
+  if (user.last_refresh_at) {
+    embed.addFields({ name: 'Last Refreshed', value: timeAgo(user.last_refresh_at), inline: true });
+  }
+
+  if (payload) {
+    const gf = (name: string) => {
+      const f = payload.data.dynamic.find((d) => d.name === name);
+      return f && typeof f.value !== 'object' ? String(f.value) : null;
+    };
+    const scrobbles = gf('total_scrobbles');
+    const artists = gf('total_artists');
+    const loved = gf('loved_tracks');
+    if (scrobbles) embed.addFields({ name: 'Total Scrobbles', value: scrobbles, inline: true });
+    if (artists) embed.addFields({ name: 'Artists', value: artists, inline: true });
+    if (loved) embed.addFields({ name: 'Loved Tracks', value: loved, inline: true });
+  }
+
+  return embed;
+}
+
 async function handleConfig(
   interaction: ChatInputCommandInteraction,
   lastfmService: LastFmService,
 ): Promise<void> {
-  const user = getUser(interaction.user.id);
+  const initialUser = getUser(interaction.user.id);
 
-  if (!user) {
+  if (!initialUser) {
     await interaction.reply({
       embeds: [
         new EmbedBuilder()
           .setColor(ERROR)
           .setTitle('Not Set Up')
-          .setDescription(
-            'You haven\'t set up your widget yet. Use `/widget setup <username>` first.',
-          ),
+          .setDescription('You haven\'t set up your widget yet. Use `/widget setup <username>` first.'),
       ],
       ephemeral: true,
     });
     return;
   }
 
+  let user: UserRow = initialUser;
+
+  await interaction.deferReply({ ephemeral: true });
+
+  let payload: WidgetPayload | null = null;
+  try { if (user.cached_data) payload = JSON.parse(user.cached_data); } catch {}
+
+  const refreshBtn = new ButtonBuilder()
+    .setCustomId('config_refresh')
+    .setLabel('Refresh')
+    .setStyle(ButtonStyle.Success);
+
+  const reauthBtn = new ButtonBuilder()
+    .setCustomId('config_reauth')
+    .setLabel('Reauthenticate')
+    .setStyle(ButtonStyle.Primary);
+
+  const backBtn = new ButtonBuilder()
+    .setCustomId('config_back')
+    .setLabel('Back')
+    .setStyle(ButtonStyle.Secondary);
+
+  const settingsSelect = new StringSelectMenuBuilder()
+    .setCustomId('config_select')
+    .setPlaceholder('Select a setting...')
+    .addOptions(
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Primary Image')
+        .setDescription('Choose which image takes priority in your widget')
+        .setValue('primary_image'),
+    );
+
   const typeSelect = new StringSelectMenuBuilder()
     .setCustomId('primary_type')
     .setPlaceholder('Choose an image type...')
     .addOptions(
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Avatar')
-        .setDescription('Show your Last.fm avatar')
-        .setValue('avatar')
-        .setEmoji('👤'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Top Artist')
-        .setDescription('Show your top artist image')
-        .setValue('artist')
-        .setEmoji('🎤'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Top Track')
-        .setDescription('Show your top track album cover')
-        .setValue('track')
-        .setEmoji('🎵'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Top Album')
-        .setDescription('Show your top album cover')
-        .setValue('album')
-        .setEmoji('💿'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Last Scrobble')
-        .setDescription('Show the cover of your most recent scrobble')
-        .setValue('last_scrobble')
-        .setEmoji('🔄'),
+      new StringSelectMenuOptionBuilder().setLabel('Avatar').setDescription('Show your Last.fm avatar').setValue('avatar').setEmoji('👤'),
+      new StringSelectMenuOptionBuilder().setLabel('Top Artist').setDescription('Show your top artist image').setValue('artist').setEmoji('🎤'),
+      new StringSelectMenuOptionBuilder().setLabel('Top Track').setDescription('Show your top track album cover').setValue('track').setEmoji('🎵'),
+      new StringSelectMenuOptionBuilder().setLabel('Top Album').setDescription('Show your top album cover').setValue('album').setEmoji('💿'),
+      new StringSelectMenuOptionBuilder().setLabel('Last Scrobble').setDescription('Show the cover of your most recent scrobble').setValue('last_scrobble').setEmoji('🔄'),
     );
 
   const periodSelect = new StringSelectMenuBuilder()
     .setCustomId('primary_period')
     .setPlaceholder('Choose a time period...')
     .addOptions(
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Overall')
-        .setDescription('All-time top track/album')
-        .setValue('overall'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Last 7 Days')
-        .setDescription('Top track/album from the past week')
-        .setValue('7d'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Last 30 Days')
-        .setDescription('Top track/album from the past month')
-        .setValue('30d'),
-      new StringSelectMenuOptionBuilder()
-        .setLabel('Cycle')
-        .setDescription('Cycle through periods on each refresh')
-        .setValue('cycle'),
+      new StringSelectMenuOptionBuilder().setLabel('Overall').setDescription('All-time top track/album').setValue('overall'),
+      new StringSelectMenuOptionBuilder().setLabel('Last 7 Days').setDescription('Top track/album from the past week').setValue('7d'),
+      new StringSelectMenuOptionBuilder().setLabel('Last 30 Days').setDescription('Top track/album from the past month').setValue('30d'),
+      new StringSelectMenuOptionBuilder().setLabel('Cycle').setDescription('Cycle through periods on each refresh').setValue('cycle'),
     );
 
-  const currentLabel = formatConfig(user.primary_image_type, user.primary_image_period);
-  const typeRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(typeSelect);
+  const mainEmbed = buildMainConfigEmbed(user, payload);
+  const mainComponents = [
+    new ActionRowBuilder<any>().addComponents(settingsSelect),
+    new ActionRowBuilder<any>().addComponents(refreshBtn, reauthBtn),
+  ];
 
-  const embed = new EmbedBuilder()
-    .setColor(INFO)
-    .setTitle('Widget Primary Image')
-    .setDescription('Choose which image appears as the primary image on your Discord profile widget.')
-    .addFields(
-      { name: 'Current', value: currentLabel, inline: true },
-    );
+  const reply = await interaction.editReply({ embeds: [mainEmbed], components: mainComponents });
 
-  const reply = await interaction.reply({
-    embeds: [embed],
-    components: [typeRow],
-    ephemeral: true,
-  });
-
+  let state: 'main' | 'primary_image' = 'main';
   let selectedType: string | null = null;
 
+  function getFreshUser(): void {
+    const fresh = getUser(interaction.user.id);
+    if (fresh) user = fresh;
+  }
+
+  function parsePayload(): WidgetPayload | null {
+    try { return user.cached_data ? JSON.parse(user.cached_data) : null; } catch { return null; }
+  }
+
   const collector = reply.createMessageComponentCollector({
-    componentType: ComponentType.StringSelect,
-    filter: (i) =>
-      (i.customId === 'primary_type' || i.customId === 'primary_period') &&
-      i.user.id === interaction.user.id,
+    filter: (i) => i.user.id === interaction.user.id,
     time: 120_000,
   });
 
   collector.on('collect', async (i) => {
-    if (i.customId === 'primary_type') {
-      selectedType = i.values[0];
-
-      if (selectedType === 'avatar' || selectedType === 'last_scrobble') {
-        collector.stop();
-        await i.deferUpdate();
-
-        setPrimaryImageConfig(interaction.user.id, selectedType as 'avatar' | 'last_scrobble', 'overall');
-        user.primary_image_type = selectedType as 'avatar' | 'last_scrobble';
-        user.primary_image_period = 'overall';
-
-        try {
-          await refreshUserWidget(user, lastfmService);
-          await i.editReply({
+    try {
+      if (i.customId === 'config_select' && i.isStringSelectMenu()) {
+        const value = i.values[0];
+        if (value === 'primary_image') {
+          state = 'primary_image';
+          selectedType = null;
+          await i.update({
             embeds: [
               new EmbedBuilder()
-                .setColor(SUCCESS)
-                .setTitle('Primary Image Updated')
-                .setDescription(`Primary image set to **${formatConfig(selectedType)}** and widget refreshed.`),
+                .setColor(INFO)
+                .setTitle('Primary Image')
+                .setDescription('Choose which image appears as the primary image on your Discord profile widget.')
+                .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) }),
             ],
-            components: [],
-          });
-        } catch (err) {
-          console.error(`[image] Refresh failed for ${interaction.user.id}:`, err);
-          await i.editReply({
-            embeds: [
-              new EmbedBuilder()
-                .setColor(ERROR)
-                .setTitle('Refresh Failed')
-                .setDescription(
-                  `Primary image set to **${formatConfig(selectedType)}**, but the widget refresh failed. Run \`/widget refresh\` to retry.`,
-                ),
+            components: [
+              new ActionRowBuilder<any>().addComponents(typeSelect),
+              new ActionRowBuilder<any>().addComponents(backBtn),
             ],
-            components: [],
           });
         }
-      } else {
-        const periodRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(periodSelect);
+
+      } else if (i.customId === 'config_back') {
+        state = 'main';
+        getFreshUser();
         await i.update({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(INFO)
-              .setTitle('Widget Primary Image')
-              .setDescription(`Choose a time period for the **${formatConfig(selectedType)}** image.`)
-              .addFields(
-                { name: 'Current', value: currentLabel, inline: true },
-              ),
-          ],
-          components: [periodRow],
+          embeds: [buildMainConfigEmbed(user, parsePayload())],
+          components: mainComponents,
+        });
+
+      } else if (i.customId === 'config_refresh') {
+        await i.deferUpdate();
+        if (!user.authorized) {
+          await interaction.followUp({
+            embeds: [new EmbedBuilder().setColor(ERROR).setTitle('Not Authorized').setDescription('Please reauthenticate first.')],
+            ephemeral: true,
+          });
+          return;
+        }
+        try {
+          await refreshUserWidget(user, lastfmService);
+          getFreshUser();
+          if (state === 'main') {
+            await interaction.editReply({
+              embeds: [buildMainConfigEmbed(user, parsePayload())],
+              components: mainComponents,
+            });
+          }
+        } catch (err) {
+          console.error(`[config] Refresh failed:`, err);
+          await interaction.followUp({
+            embeds: [new EmbedBuilder().setColor(ERROR).setTitle('Refresh Failed').setDescription('Could not refresh your widget.')],
+            ephemeral: true,
+          });
+        }
+
+      } else if (i.customId === 'config_reauth') {
+        await i.deferUpdate();
+        const authorizeUrl = new URL('https://discord.com/oauth2/authorize');
+        authorizeUrl.searchParams.set('client_id', config.discordClientId);
+        authorizeUrl.searchParams.set('response_type', 'token');
+        authorizeUrl.searchParams.set('scope', 'openid sdk.social_layer');
+        authorizeUrl.searchParams.set('redirect_uri', `${config.publicUrl}/callback`);
+        authorizeUrl.searchParams.set('state', interaction.user.id);
+
+        const authBtn = new ButtonBuilder()
+          .setStyle(ButtonStyle.Link)
+          .setLabel('Authorize')
+          .setURL(authorizeUrl.toString());
+
+        await interaction.editReply({
+          embeds: [new EmbedBuilder().setColor(INFO).setTitle('Reauthorize').setDescription('Click the button below to reauthorize the application.')],
+          components: [new ActionRowBuilder<any>().addComponents(authBtn)],
+        });
+
+        try {
+          await waitForOAuth(interaction.user.id, 5 * 60 * 1000);
+          getFreshUser();
+          await interaction.editReply({
+            embeds: [buildMainConfigEmbed(user, parsePayload())],
+            components: mainComponents,
+          });
+        } catch {
+          await interaction.editReply({
+            embeds: [buildMainConfigEmbed(user, payload)],
+            components: mainComponents,
+          });
+        }
+
+      } else if (i.customId === 'primary_type' && i.isStringSelectMenu()) {
+        selectedType = i.values[0];
+        if (selectedType === 'avatar' || selectedType === 'last_scrobble') {
+          await i.deferUpdate();
+          setPrimaryImageConfig(interaction.user.id, selectedType as 'avatar' | 'last_scrobble', 'overall');
+          user.primary_image_type = selectedType as 'avatar' | 'last_scrobble';
+          user.primary_image_period = 'overall';
+          try {
+            await refreshUserWidget(user, lastfmService);
+          } catch (err) {
+            console.error(`[config] Refresh failed:`, err);
+          }
+          getFreshUser();
+          state = 'main';
+          await interaction.editReply({
+            embeds: [buildMainConfigEmbed(user, parsePayload())],
+            components: mainComponents,
+          });
+        } else if (selectedType) {
+          await i.update({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(INFO)
+                .setTitle('Primary Image')
+                .setDescription(`Choose a time period for the **${formatConfig(selectedType)}** image.`)
+                .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) }),
+            ],
+            components: [
+              new ActionRowBuilder<any>().addComponents(periodSelect),
+              new ActionRowBuilder<any>().addComponents(backBtn),
+            ],
+          });
+        }
+
+      } else if (i.customId === 'primary_period' && selectedType && i.isStringSelectMenu()) {
+        await i.deferUpdate();
+        const period = i.values[0] as PrimaryImagePeriod;
+        setPrimaryImageConfig(interaction.user.id, selectedType as 'artist' | 'track' | 'album', period);
+        user.primary_image_type = selectedType as 'artist' | 'track' | 'album';
+        user.primary_image_period = period;
+        try {
+          await refreshUserWidget(user, lastfmService);
+        } catch (err) {
+          console.error(`[config] Refresh failed:`, err);
+        }
+        getFreshUser();
+        state = 'main';
+        await interaction.editReply({
+          embeds: [buildMainConfigEmbed(user, parsePayload())],
+          components: mainComponents,
         });
       }
-    } else if (i.customId === 'primary_period' && selectedType) {
-      collector.stop();
-      const period = i.values[0] as PrimaryImagePeriod;
-      await i.deferUpdate();
-
-      setPrimaryImageConfig(interaction.user.id, selectedType as 'artist' | 'track' | 'album', period);
-      user.primary_image_type = selectedType as 'artist' | 'track' | 'album';
-      user.primary_image_period = period;
-
-      try {
-        await refreshUserWidget(user, lastfmService);
-        await i.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(SUCCESS)
-              .setTitle('Primary Image Updated')
-              .setDescription(`Primary image set to **${formatConfig(selectedType, period)}** and widget refreshed.`),
-          ],
-          components: [],
-        });
-      } catch (err) {
-        console.error(`[image] Refresh failed for ${interaction.user.id}:`, err);
-        await i.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(ERROR)
-              .setTitle('Refresh Failed')
-              .setDescription(
-                `Primary image set to **${formatConfig(selectedType, period)}**, but the widget refresh failed. Run \`/widget refresh\` to retry.`,
-              ),
-          ],
-          components: [],
-        });
-      }
+    } catch (err) {
+      console.error(`[config] Interaction error:`, err);
     }
   });
 
   collector.on('end', async () => {
-    try {
-      await interaction.editReply({ components: [] });
-    } catch {
-      // reply already cleaned up
-    }
+    try { await interaction.editReply({ components: [] }); } catch {}
   });
 }
 
