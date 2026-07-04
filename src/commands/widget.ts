@@ -231,17 +231,13 @@ function buildMainConfigEmbed(user: UserRow): EmbedBuilder {
     );
 
   if (user.last_refresh_at) {
-    embed.addFields({ name: 'Last Refreshed', value: timeAgo(user.last_refresh_at), inline: true });
+    embed.addFields({ name: 'Last Refreshed', value: timeAgo(user.last_refresh_at), inline: false });
   }
 
   const nextIn = getNextRefreshIn();
   if (nextIn !== null) {
-    embed.addFields({ name: 'Next Auto-Refresh', value: formatTimeLeft(nextIn), inline: true });
+    embed.addFields({ name: 'Next Auto-Refresh', value: formatTimeLeft(nextIn), inline: false });
   }
-
-  embed.addFields(
-    { name: 'Primary Image', value: formatConfig(user.primary_image_type, user.primary_image_period), inline: true },
-  );
 
   return embed;
 }
