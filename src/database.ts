@@ -76,6 +76,12 @@ export function setAuthorized(discordId: string, accessToken: string): void {
   stmt.run(accessToken, discordId);
 }
 
+export function deauthorizeUser(discordId: string): void {
+  getDb().prepare(`
+    UPDATE users SET authorized = 0, access_token = NULL WHERE discord_id = ?
+  `).run(discordId);
+}
+
 export function updateRefresh(
   discordId: string,
   now: string,

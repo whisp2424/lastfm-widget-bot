@@ -12,7 +12,7 @@ import {
   type ChatInputCommandInteraction,
 } from 'discord.js';
 import { config } from '../config.js';
-import { getUser, upsertUser, setPrimaryImageConfig } from '../database.js';
+import { getUser, upsertUser, setPrimaryImageConfig, deauthorizeUser } from '../database.js';
 import { refreshUserWidget, CYCLE_PERIODS } from '../services/shared.js';
 import { getNextRefreshIn } from '../services/scheduler.js';
 import { waitForOAuth } from '../oauth-store.js';
@@ -113,6 +113,42 @@ async function handleSetup(
   }
 
   upsertUser(interaction.user.id, username);
+
+  const existingUser = getUser(interaction.user.id);
+  if (existingUser?.authorized) {
+    const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId('reauth_yes').setLabel('Yes, Reauthenticate').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('reauth_no').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
+    );
+
+    const msg = await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(INFO)
+          .setTitle('Already Linked')
+          .setDescription(`You are already linked to **${existingUser.lastfm_username}**. Do you want to reauthenticate?`),
+      ],
+      components: [confirmRow],
+    });
+
+    try {
+      const confirm = await msg.awaitMessageComponent({
+        filter: (i) => i.user.id === interaction.user.id,
+        time: 60_000,
+      });
+
+      if (confirm.customId === 'reauth_no') {
+        await confirm.update({ embeds: [new EmbedBuilder().setColor(INFO).setTitle('Cancelled').setDescription('Reauthentication cancelled.')], components: [] });
+        return;
+      }
+
+      deauthorizeUser(interaction.user.id);
+      await confirm.deferUpdate();
+    } catch {
+      await interaction.editReply({ embeds: [new EmbedBuilder().setColor(ERROR).setTitle('Timed Out').setDescription('Reauthentication prompt expired. Use `/widget setup <username>` to try again.')], components: [] });
+      return;
+    }
+  }
 
   const authorizeUrl = new URL('https://discord.com/oauth2/authorize');
   authorizeUrl.searchParams.set('client_id', config.discordClientId);
@@ -222,6 +258,13 @@ function formatTimeLeft(ms: number): string {
   return mins > 0 ? `${hours}h ${mins}m` : `${hours} hours`;
 }
 
+function unauthorizedEmbed(): EmbedBuilder {
+  return new EmbedBuilder()
+    .setColor(ERROR)
+    .setTitle('Not Set Up')
+    .setDescription('You haven\'t set up your widget yet. Use `/widget setup <username>` first.');
+}
+
 function buildMainConfigEmbed(user: UserRow): EmbedBuilder {
   const embed = new EmbedBuilder()
     .setColor(INFO)
@@ -248,16 +291,8 @@ async function handleConfig(
 ): Promise<void> {
   const initialUser = getUser(interaction.user.id);
 
-  if (!initialUser) {
-    await interaction.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(ERROR)
-          .setTitle('Not Set Up')
-          .setDescription('You haven\'t set up your widget yet. Use `/widget setup <username>` first.'),
-      ],
-      ephemeral: true,
-    });
+  if (!initialUser || !initialUser.authorized) {
+    await interaction.reply({ embeds: [unauthorizedEmbed()], ephemeral: true });
     return;
   }
 
@@ -637,15 +672,7 @@ async function handleImage(
   const user = getUser(interaction.user.id);
 
   if (!user || !user.authorized) {
-    await interaction.reply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(ERROR)
-          .setTitle('Not Set Up')
-          .setDescription('You haven\'t set up your widget yet. Use `/widget setup <username>` first.'),
-      ],
-      ephemeral: true,
-    });
+    await interaction.reply({ embeds: [unauthorizedEmbed()], ephemeral: true });
     return;
   }
 
@@ -860,17 +887,8 @@ async function handleRefresh(
 
   const user = getUser(interaction.user.id);
 
-  if (!user) {
-    await interaction.editReply({
-      embeds: [
-        new EmbedBuilder()
-          .setColor(ERROR)
-          .setTitle('Not Set Up')
-          .setDescription(
-            'You haven\'t set up your widget yet. Use `/widget setup <username>` first.',
-          ),
-      ],
-    });
+  if (!user || !user.authorized) {
+    await interaction.editReply({ embeds: [unauthorizedEmbed()] });
     return;
   }
 
