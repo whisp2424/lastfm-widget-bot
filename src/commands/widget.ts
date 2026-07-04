@@ -731,11 +731,11 @@ async function handleImage(
   }
 
   const customizeRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('img_customize').setLabel('Customize').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('img_customize').setLabel('Customize').setStyle(ButtonStyle.Secondary),
   );
   if (user.primary_image_period === 'cycle' && (type === 'artist' || type === 'track' || type === 'album')) {
     customizeRow.addComponents(
-      new ButtonBuilder().setCustomId('img_cycle').setLabel('Cycle Now').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('img_cycle').setLabel('Cycle Now').setStyle(ButtonStyle.Secondary),
     );
   }
 
