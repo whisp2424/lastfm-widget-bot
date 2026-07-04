@@ -12,11 +12,11 @@ import {
   type ChatInputCommandInteraction,
 } from 'discord.js';
 import { config } from '../config.js';
-import { getUser, upsertUser, setPrimaryImageConfig, deauthorizeUser } from '../database.js';
+import { getUser, upsertUser, setPrimaryImageConfig, deauthorizeUser, setSchedulerNextRefresh } from '../database.js';
 import { refreshUserWidget, CYCLE_PERIODS } from '../services/shared.js';
-import { getNextRefreshIn } from '../services/scheduler.js';
+import { getNextRefreshIn, AUTO_REFRESH_INTERVAL } from '../services/scheduler.js';
 import { waitForOAuth } from '../oauth-store.js';
-import type { LastFmService } from '../services/lastfm.js';
+import { isDefaultImage, type LastFmService } from '../services/lastfm.js';
 import type { PrimaryImagePeriod, PrimaryImageType, WidgetPayload, UserRow } from '../types.js';
 
 const SUCCESS = 0xa6e3a1;
@@ -407,8 +407,19 @@ async function handleConfig(
           });
           return;
         }
+
+        const disabledRefreshBtn = ButtonBuilder.from(refreshBtn).setDisabled(true);
+        await interaction.editReply({
+          components: [
+            new ActionRowBuilder<any>().addComponents(settingsSelect),
+            new ActionRowBuilder<any>().addComponents(reauthBtn, disabledRefreshBtn),
+          ],
+        });
+
         try {
           await refreshUserWidget(user, lastfmService);
+          const next = Date.now() + AUTO_REFRESH_INTERVAL;
+          setSchedulerNextRefresh(new Date(next).toISOString());
           getFreshUser();
           if (state === 'main') {
             await interaction.editReply({
@@ -418,6 +429,10 @@ async function handleConfig(
           }
         } catch (err) {
           console.error(`[config] Refresh failed:`, err);
+          await interaction.editReply({
+            embeds: [buildMainConfigEmbed(user)],
+            components: mainComponents,
+          });
           await interaction.followUp({
             embeds: [new EmbedBuilder().setColor(ERROR).setTitle('Refresh Failed').setDescription('Could not refresh your widget.')],
             ephemeral: true,
@@ -701,6 +716,11 @@ async function handleImage(
   const primaryImageField = gf('primary_image');
   const primaryImageUrl = typeof primaryImageField === 'object' ? primaryImageField.url : null;
 
+  const avatarField = gf('avatar');
+  const avatarUrl = typeof avatarField === 'object' ? avatarField.url : null;
+
+  const effectiveImageUrl = (primaryImageUrl && !isDefaultImage(primaryImageUrl)) ? primaryImageUrl : avatarUrl;
+
   const type = user.primary_image_type;
   const effectivePeriod = user.primary_image_period === 'cycle'
     ? CYCLE_PERIODS[(user.cycle_index - 1 + 3) % 3]
@@ -734,7 +754,7 @@ async function handleImage(
         loved: gfs('loved_tracks'),
         since: gfs('scrobbling_since', ''),
       },
-      primaryImageUrl,
+      effectiveImageUrl,
     );
 
     linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -756,7 +776,7 @@ async function handleImage(
         playcount: raw?.playcount ?? 0,
         listeners: raw?.listeners ?? 0,
       },
-      recent.cover ?? primaryImageUrl,
+      effectiveImageUrl,
       title,
     );
 
@@ -788,7 +808,7 @@ async function handleImage(
         listeners: raw?.listeners ?? 0,
         bio: raw?.bio ?? '',
       },
-      primaryImageUrl,
+      effectiveImageUrl,
       title,
     );
 
@@ -822,7 +842,7 @@ async function handleImage(
         playcount: raw?.playcount ?? 0,
         listeners: raw?.listeners ?? 0,
       },
-      primaryImageUrl,
+      effectiveImageUrl,
       title,
     );
 
@@ -859,7 +879,7 @@ async function handleImage(
         listeners: raw?.listeners ?? 0,
         wiki: raw?.wiki ?? '',
       },
-      primaryImageUrl,
+      effectiveImageUrl,
       title,
     );
 
@@ -894,6 +914,8 @@ async function handleRefresh(
 
   try {
     await refreshUserWidget(user, lastfmService);
+    const next = Date.now() + AUTO_REFRESH_INTERVAL;
+    setSchedulerNextRefresh(new Date(next).toISOString());
     await interaction.editReply({
       embeds: [
         new EmbedBuilder()

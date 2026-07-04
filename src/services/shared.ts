@@ -16,7 +16,8 @@ function formatDate(unixSeconds: string): string {
 }
 
 function orDefault(url: string | null | undefined): string {
-  return url ?? DEFAULT_IMAGE_URL;
+  if (!url || isDefaultImage(url)) return DEFAULT_IMAGE_URL;
+  return url;
 }
 
 export const CYCLE_PERIODS = ['overall', '30d', '7d'] as const;
@@ -98,13 +99,28 @@ export async function refreshUserWidget(
   };
 
   const primaryImage = (() => {
-    if (user.primary_image_type === 'avatar' || user.primary_image_type === 'last_scrobble') {
-      return imageSources[user.primary_image_type];
-    }
+    const pick = (key: string) => imageSources[key] ?? DEFAULT_IMAGE_URL;
+    const isReal = (key: string) => hasRealImage[key] ?? false;
+
+    if (user.primary_image_type === 'avatar') return pick('avatar');
+    if (user.primary_image_type === 'last_scrobble') return pick('last_scrobble');
+
     const period = user.primary_image_period === 'cycle'
       ? CYCLE_PERIODS[user.cycle_index]
       : user.primary_image_period;
-    return imageSources[`${user.primary_image_type}_${period}`] ?? DEFAULT_IMAGE_URL;
+
+    const key = `${user.primary_image_type}_${period}`;
+
+    if (isReal(key)) return pick(key);
+
+    if (isReal('avatar')) return pick('avatar');
+
+    const fallbackOrder = ['last_scrobble', 'artist_overall', 'artist_7d', 'artist_30d', 'album_overall', 'track_overall'];
+    for (const fb of fallbackOrder) {
+      if (isReal(fb)) return pick(fb);
+    }
+
+    return pick(key);
   })();
 
   const dynamic: DynamicField[] = [
