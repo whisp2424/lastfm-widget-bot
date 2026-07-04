@@ -13,14 +13,15 @@ import {
 } from 'discord.js';
 import { config } from '../config.js';
 import { getUser, upsertUser, setPrimaryImageConfig } from '../database.js';
-import { refreshUserWidget } from '../services/shared.js';
+import { refreshUserWidget, CYCLE_PERIODS } from '../services/shared.js';
 import { waitForOAuth } from '../oauth-store.js';
 import type { LastFmService } from '../services/lastfm.js';
-import type { PrimaryImagePeriod } from '../types.js';
+import type { PrimaryImagePeriod, WidgetPayload } from '../types.js';
 
 const SUCCESS = 0xa6e3a1;
 const ERROR = 0xba0000;
 const INFO = 0xba0000;
+const ACCENT = 0x5865F2;
 
 export const widgetCommand = {
   builder: new SlashCommandBuilder()
@@ -54,9 +55,16 @@ export const widgetCommand = {
     )
     .addSubcommand((sub) =>
       sub
-        .setName('image')
+        .setName('config')
         .setDescription(
           'Choose which image takes priority in your widget',
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('image')
+        .setDescription(
+          'Show details about your widget\'s primary image',
         ),
     ),
 
@@ -70,8 +78,10 @@ export const widgetCommand = {
       await handleSetup(interaction, lastfmService);
     } else if (subcommand === 'refresh') {
       await handleRefresh(interaction, lastfmService);
+    } else if (subcommand === 'config') {
+      await handleConfig(interaction, lastfmService);
     } else if (subcommand === 'image') {
-      await handlePrimary(interaction, lastfmService);
+      await handleImage(interaction, lastfmService);
     }
   },
 };
@@ -190,7 +200,7 @@ function formatConfig(type: string, period?: string): string {
   return `Top ${type.charAt(0).toUpperCase() + type.slice(1)} (${periodLabel})`;
 }
 
-async function handlePrimary(
+async function handleConfig(
   interaction: ChatInputCommandInteraction,
   lastfmService: LastFmService,
 ): Promise<void> {
@@ -218,28 +228,23 @@ async function handlePrimary(
       new StringSelectMenuOptionBuilder()
         .setLabel('Avatar')
         .setDescription('Show your Last.fm avatar')
-        .setValue('avatar')
-        .setEmoji('👤'),
+        .setValue('avatar'),
       new StringSelectMenuOptionBuilder()
         .setLabel('Top Artist')
         .setDescription('Show your top artist image')
-        .setValue('artist')
-        .setEmoji('🎤'),
+        .setValue('artist'),
       new StringSelectMenuOptionBuilder()
         .setLabel('Top Track')
         .setDescription('Show your top track album cover')
-        .setValue('track')
-        .setEmoji('🎵'),
+        .setValue('track'),
       new StringSelectMenuOptionBuilder()
         .setLabel('Top Album')
         .setDescription('Show your top album cover')
-        .setValue('album')
-        .setEmoji('💿'),
+        .setValue('album'),
       new StringSelectMenuOptionBuilder()
         .setLabel('Last Scrobble')
         .setDescription('Show the cover of your most recent scrobble')
-        .setValue('last_scrobble')
-        .setEmoji('🔄'),
+        .setValue('last_scrobble'),
     );
 
   const periodSelect = new StringSelectMenuBuilder()
@@ -385,6 +390,404 @@ async function handlePrimary(
       await interaction.editReply({ components: [] });
     } catch {
       // reply already cleaned up
+    }
+  });
+}
+
+function getPeriodLabel(period: string): string {
+  if (period === '7d') return 'Last 7 Days';
+  if (period === '30d') return 'Last 30 Days';
+  if (period === 'overall') return 'Overall';
+  return period;
+}
+
+function getField(
+  dynamic: WidgetPayload['data']['dynamic'],
+  name: string,
+): string | number | { url: string } | undefined {
+  return dynamic.find((f) => f.name === name)?.value;
+}
+
+function buildArtistEmbed(
+  name: string,
+  info: { tags: string[]; similar: string[]; playcount: number; listeners: number; bio: string },
+  imageUrl: string | null,
+  title: string,
+): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setColor(ACCENT)
+    .setTitle(title)
+    .setDescription(`**${name}**`)
+    .setThumbnail(imageUrl);
+
+  if (info.tags.length > 0) {
+    embed.addFields({ name: 'Tags', value: info.tags.slice(0, 8).join(', '), inline: false });
+  }
+
+  embed.addFields(
+    { name: 'Playcount', value: info.playcount.toLocaleString(), inline: true },
+    { name: 'Listeners', value: info.listeners.toLocaleString(), inline: true },
+  );
+
+  if (info.similar.length > 0) {
+    embed.addFields({ name: 'Similar Artists', value: info.similar.slice(0, 5).join(', '), inline: false });
+  }
+
+  if (info.bio) {
+    const truncated = info.bio.length > 300 ? info.bio.slice(0, 300) + '...' : info.bio;
+    embed.addFields({ name: 'About', value: truncated, inline: false });
+  }
+
+  return embed;
+}
+
+function buildAlbumEmbed(
+  name: string,
+  artist: string,
+  info: { tags: string[]; tracks: string[]; releaseDate: string; playcount: number; listeners: number; wiki: string },
+  imageUrl: string | null,
+  title: string,
+): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setColor(ACCENT)
+    .setTitle(title)
+    .setDescription(`**${artist}** — ${name}`)
+    .setThumbnail(imageUrl);
+
+  embed.addFields(
+    { name: 'Playcount', value: info.playcount.toLocaleString(), inline: true },
+    { name: 'Listeners', value: info.listeners.toLocaleString(), inline: true },
+  );
+
+  if (info.releaseDate) {
+    embed.addFields({ name: 'Release Date', value: info.releaseDate, inline: true });
+  }
+
+  if (info.tracks.length > 0) {
+    const trackList = info.tracks.slice(0, 10).join(', ');
+    embed.addFields({ name: `Tracks (${info.tracks.length})`, value: trackList, inline: false });
+  }
+
+  if (info.tags.length > 0) {
+    embed.addFields({ name: 'Tags', value: info.tags.slice(0, 8).join(', '), inline: false });
+  }
+
+  if (info.wiki) {
+    const truncated = info.wiki.length > 300 ? info.wiki.slice(0, 300) + '...' : info.wiki;
+    embed.addFields({ name: 'About', value: truncated, inline: false });
+  }
+
+  return embed;
+}
+
+function buildTrackEmbed(
+  name: string,
+  artist: string,
+  info: { tags: string[]; album: string; duration: number; playcount: number; listeners: number },
+  coverUrl: string | null,
+  title: string,
+): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setColor(ACCENT)
+    .setTitle(title)
+    .setDescription(`**${artist}** — ${name}`)
+    .setThumbnail(coverUrl);
+
+  if (info.album) {
+    embed.addFields({ name: 'Album', value: info.album, inline: true });
+  }
+
+  if (info.duration > 0) {
+    const minutes = Math.floor(info.duration / 60);
+    const seconds = info.duration % 60;
+    embed.addFields({ name: 'Duration', value: `${minutes}:${seconds.toString().padStart(2, '0')}`, inline: true });
+  }
+
+  embed.addFields(
+    { name: 'Playcount', value: info.playcount.toLocaleString(), inline: true },
+    { name: 'Listeners', value: info.listeners.toLocaleString(), inline: true },
+  );
+
+  if (info.tags.length > 0) {
+    embed.addFields({ name: 'Tags', value: info.tags.slice(0, 8).join(', '), inline: false });
+  }
+
+  return embed;
+}
+
+function buildAvatarEmbed(
+  username: string,
+  stats: { scrobbles: string | number; artists: string | number; loved: string | number; since: string },
+  imageUrl: string | null,
+): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setColor(ACCENT)
+    .setTitle(`${username} — Last.fm Profile`)
+    .setThumbnail(imageUrl)
+    .addFields(
+      { name: 'Total Scrobbles', value: String(stats.scrobbles), inline: true },
+      { name: 'Artists', value: String(stats.artists), inline: true },
+      { name: 'Loved Tracks', value: String(stats.loved), inline: true },
+    );
+
+  if (stats.since) {
+    embed.addFields({ name: 'Scrobbling Since', value: stats.since, inline: false });
+  }
+
+  return embed;
+}
+
+async function handleImage(
+  interaction: ChatInputCommandInteraction,
+  lastfmService: LastFmService,
+): Promise<void> {
+  const user = getUser(interaction.user.id);
+
+  if (!user || !user.authorized) {
+    await interaction.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(ERROR)
+          .setTitle('Not Set Up')
+          .setDescription('You haven\'t set up your widget yet. Use `/widget setup <username>` first.'),
+      ],
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (!user.cached_data) {
+    await interaction.reply({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(ERROR)
+          .setTitle('No Data Yet')
+          .setDescription('Your widget hasn\'t been refreshed yet. Use `/widget refresh` first.'),
+      ],
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const payload: WidgetPayload = JSON.parse(user.cached_data);
+  const dynamic = payload.data.dynamic;
+
+  const gf = (name: string) => getField(dynamic, name);
+  const gfs = (name: string, fallback = '—'): string => {
+    const v = getField(dynamic, name);
+    return v === undefined || typeof v === 'object' ? fallback : String(v);
+  };
+
+  const primaryImageField = gf('primary_image');
+  const primaryImageUrl = typeof primaryImageField === 'object' ? primaryImageField.url : null;
+
+  const type = user.primary_image_type;
+  const effectivePeriod = user.primary_image_period === 'cycle'
+    ? CYCLE_PERIODS[(user.cycle_index - 1 + 3) % 3]
+    : user.primary_image_period;
+
+  const userUrl = `https://www.last.fm/user/${encodeURIComponent(user.lastfm_username)}`;
+  const publicBase = 'https://www.last.fm/music/';
+  const enc = (s: string) => encodeURIComponent(s);
+
+  await interaction.deferReply({ ephemeral: false });
+
+  const periodLabel = getPeriodLabel(effectivePeriod);
+  const typeTitle = type === 'avatar' ? 'Avatar'
+    : type === 'last_scrobble' ? 'Last Scrobble'
+    : `Top ${type.charAt(0).toUpperCase() + type.slice(1)}`;
+  const title = periodLabel ? `${typeTitle} — ${periodLabel}` : typeTitle;
+
+  let embed: EmbedBuilder;
+  let linkButtons: ActionRowBuilder<ButtonBuilder>;
+  let extraButtons: ActionRowBuilder<ButtonBuilder> | null = null;
+
+  if (type === 'avatar') {
+    embed = buildAvatarEmbed(
+      payload.username,
+      {
+        scrobbles: gfs('total_scrobbles'),
+        artists: gfs('total_artists'),
+        loved: gfs('loved_tracks'),
+        since: gfs('scrobbling_since', ''),
+      },
+      primaryImageUrl,
+    );
+
+    linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View Profile').setURL(userUrl),
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View Library').setURL(`${userUrl}/library/artists`),
+    );
+
+  } else if (type === 'last_scrobble') {
+    const recent = await lastfmService.getRecentTrack(user.lastfm_username);
+    const trackInfo = await lastfmService.getTrackInfo(recent.artist, recent.name).catch(() => null);
+
+    embed = buildTrackEmbed(
+      recent.name,
+      recent.artist,
+      trackInfo ?? { tags: [], album: '', duration: 0, playcount: 0, listeners: 0 },
+      recent.cover ?? primaryImageUrl,
+      title,
+    );
+
+    const trackUrl = `${publicBase}${enc(recent.artist)}/_/${enc(recent.name)}`;
+
+    linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View on Last.fm').setURL(trackUrl),
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('In your library').setURL(`${userUrl}/library/music/${enc(recent.artist)}/_/${enc(recent.name)}`),
+    );
+
+  } else if (type === 'artist') {
+    const suffix = effectivePeriod === 'overall' ? '' : `_${effectivePeriod}`;
+    const name = String(gf(`top_artist${suffix}`) ?? '');
+    if (!name || name === '—') {
+      await interaction.editReply({
+        embeds: [new EmbedBuilder().setColor(ERROR).setTitle('No Data').setDescription('No artist data available for the current period.')],
+      });
+      return;
+    }
+
+    const info = await lastfmService.getArtistInfo(name).catch(() => null);
+    embed = buildArtistEmbed(
+      name,
+      info ?? { tags: [], similar: [], playcount: 0, listeners: 0, bio: '' },
+      primaryImageUrl,
+      title,
+    );
+
+    linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View on Last.fm').setURL(`${publicBase}${enc(name)}`),
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('In your library').setURL(`${userUrl}/library/music/${enc(name)}`),
+    );
+
+  } else if (type === 'track') {
+    const suffix = effectivePeriod === 'overall' ? '' : `_${effectivePeriod}`;
+    const value = String(gf(`top_track${suffix}`) ?? '');
+    const parts = value.split(' - ');
+    const trackArtist = parts[0] ?? '';
+    const trackName = parts[1] ?? '';
+    if (!trackName || trackName === '—' || !trackArtist || trackArtist === '—') {
+      await interaction.editReply({
+        embeds: [new EmbedBuilder().setColor(ERROR).setTitle('No Data').setDescription('No track data available for the current period.')],
+      });
+      return;
+    }
+
+    const info = await lastfmService.getTrackInfo(trackArtist, trackName).catch(() => null);
+    embed = buildTrackEmbed(
+      trackName,
+      trackArtist,
+      info ?? { tags: [], album: '', duration: 0, playcount: 0, listeners: 0 },
+      primaryImageUrl,
+      title,
+    );
+
+    const trackUrl = `${publicBase}${enc(trackArtist)}/_/${enc(trackName)}`;
+
+    linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View on Last.fm').setURL(trackUrl),
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('In your library').setURL(`${userUrl}/library/music/${enc(trackArtist)}/_/${enc(trackName)}`),
+    );
+
+  } else if (type === 'album') {
+    const suffix = effectivePeriod === 'overall' ? '' : `_${effectivePeriod}`;
+    const value = String(gf(`top_album${suffix}`) ?? '');
+    const parts = value.split(' - ');
+    const albumArtist = parts[0] ?? '';
+    const albumName = parts[1] ?? '';
+    if (!albumName || albumName === '—' || !albumArtist || albumArtist === '—') {
+      await interaction.editReply({
+        embeds: [new EmbedBuilder().setColor(ERROR).setTitle('No Data').setDescription('No album data available for the current period.')],
+      });
+      return;
+    }
+
+    const info = await lastfmService.getAlbumInfo(albumArtist, albumName).catch(() => null);
+    embed = buildAlbumEmbed(
+      albumName,
+      albumArtist,
+      info ?? { tags: [], tracks: [], releaseDate: '', playcount: 0, listeners: 0, wiki: '' },
+      primaryImageUrl,
+      title,
+    );
+
+    const albumUrl = `${publicBase}${enc(albumArtist)}/${enc(albumName)}`;
+
+    linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View on Last.fm').setURL(albumUrl),
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('In your library').setURL(`${userUrl}/library/music/${enc(albumArtist)}/${enc(albumName)}`),
+    );
+  } else {
+    await interaction.editReply({
+      embeds: [new EmbedBuilder().setColor(ERROR).setTitle('Unknown Type').setDescription('Unknown primary image type.')],
+    });
+    return;
+  }
+
+  const customizeRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId('img_customize').setLabel('Customize').setStyle(ButtonStyle.Secondary),
+  );
+  if (user.primary_image_period === 'cycle' && (type === 'artist' || type === 'track' || type === 'album')) {
+    customizeRow.addComponents(
+      new ButtonBuilder().setCustomId('img_cycle').setLabel('Cycle Now').setStyle(ButtonStyle.Secondary),
+    );
+  }
+
+  const components: ActionRowBuilder<ButtonBuilder>[] = [linkButtons];
+  components.push(customizeRow);
+
+  const reply = await interaction.editReply({ embeds: [embed], components });
+
+  const collector = reply.createMessageComponentCollector({
+    componentType: ComponentType.Button,
+    filter: (i) =>
+      (i.customId === 'img_customize' || i.customId === 'img_cycle') &&
+      i.user.id === interaction.user.id,
+    time: 120_000,
+    max: 1,
+  });
+
+  collector.on('collect', async (i) => {
+    if (i.customId === 'img_customize') {
+      await i.deferUpdate();
+      await interaction.followUp({
+        embeds: [
+          new EmbedBuilder()
+            .setColor(INFO)
+            .setTitle('Customize Primary Image')
+            .setDescription('Use `/widget config` to change your primary image type or time period.'),
+        ],
+        ephemeral: true,
+      });
+    } else if (i.customId === 'img_cycle') {
+      await i.deferUpdate();
+      const freshUser = getUser(interaction.user.id);
+      if (freshUser) {
+        try {
+          await refreshUserWidget(freshUser, lastfmService);
+          await interaction.followUp({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(SUCCESS)
+                .setTitle('Cycle Advanced')
+                .setDescription(`Widget cycled to the next period. Run \`/widget image\` to see the updated details.`),
+            ],
+            ephemeral: true,
+          });
+        } catch (err) {
+          console.error(`[image] Cycle refresh failed for ${interaction.user.id}:`, err);
+          await interaction.followUp({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(ERROR)
+                .setTitle('Cycle Failed')
+                .setDescription('Could not advance the cycle. Please try again later.'),
+            ],
+            ephemeral: true,
+          });
+        }
+      }
     }
   });
 }

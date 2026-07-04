@@ -19,7 +19,7 @@ function orDefault(url: string | null | undefined): string {
   return url ?? DEFAULT_IMAGE_URL;
 }
 
-const CYCLE_PERIODS = ['overall', '30d', '7d'] as const;
+export const CYCLE_PERIODS = ['overall', '30d', '7d'] as const;
 
 function safeFetch<T>(promise: Promise<T>, fallback: T): Promise<T> {
   return promise.catch(() => fallback);

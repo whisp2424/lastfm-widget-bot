@@ -202,4 +202,111 @@ export class LastFmService {
     }>('user.getLovedTracks', { user: username, limit: 1 });
     return parseInt(data.lovedtracks?.['@attr']?.total ?? '0', 10);
   }
+
+  async getArtistInfo(artist: string): Promise<{
+    name: string;
+    bio: string;
+    tags: string[];
+    similar: string[];
+    playcount: number;
+    listeners: number;
+    url: string;
+  }> {
+    const data = await this.fetch<{
+      artist: {
+        name: string;
+        url: string;
+        bio: { summary: string; content: string };
+        tags: { tag: { name: string }[] };
+        similar: { artist: { name: string }[] };
+        stats: { playcount: string; listeners: string };
+      };
+    }>('artist.getInfo', { artist, lang: 'en' });
+
+    const a = data.artist;
+    return {
+      name: a.name,
+      bio: a.bio?.summary?.replace(/<[^>]*>/g, '').trim() ?? '',
+      tags: (a.tags?.tag ?? []).map((t) => t.name),
+      similar: (a.similar?.artist ?? []).map((s) => s.name),
+      playcount: parseInt(a.stats?.playcount ?? '0', 10),
+      listeners: parseInt(a.stats?.listeners ?? '0', 10),
+      url: a.url,
+    };
+  }
+
+  async getAlbumInfo(artist: string, album: string): Promise<{
+    name: string;
+    artist: string;
+    wiki: string;
+    releaseDate: string;
+    tracks: string[];
+    tags: string[];
+    playcount: number;
+    listeners: number;
+    url: string;
+  }> {
+    const data = await this.fetch<{
+      album: {
+        name: string;
+        artist: string;
+        url: string;
+        wiki: { summary: string; published: string };
+        tracks: { track: { name: string }[] };
+        tags: { tag: { name: string }[] };
+        playcount: string;
+        listeners: string;
+      };
+    }>('album.getInfo', { artist, album, lang: 'en' });
+
+    const a = data.album;
+    return {
+      name: a.name,
+      artist: a.artist,
+      wiki: a.wiki?.summary?.replace(/<[^>]*>/g, '').trim() ?? '',
+      releaseDate: a.wiki?.published ?? '',
+      tracks: (a.tracks?.track ?? []).map((t) => t.name),
+      tags: (a.tags?.tag ?? []).map((t) => t.name),
+      playcount: parseInt(a.playcount ?? '0', 10),
+      listeners: parseInt(a.listeners ?? '0', 10),
+      url: a.url,
+    };
+  }
+
+  async getTrackInfo(artist: string, track: string): Promise<{
+    name: string;
+    artist: string;
+    album: string;
+    duration: number;
+    tags: string[];
+    playcount: number;
+    listeners: number;
+    url: string;
+  }> {
+    const data = await this.fetch<{
+      track: {
+        name: string;
+        artist: { name: string };
+        album?: { title: string };
+        url: string;
+        duration: string;
+        wiki: { summary: string };
+        toptags: { tag: { name: string }[] };
+        playcount: string;
+        listeners: string;
+      };
+    }>('track.getInfo', { artist, track, lang: 'en' });
+
+    const t = data.track;
+    return {
+      name: t.name,
+      artist: t.artist.name,
+      album: t.album?.title ?? '',
+      duration: parseInt(t.duration ?? '0', 10),
+      tags: (t.toptags?.tag ?? []).map((tag) => tag.name),
+      playcount: parseInt(t.playcount ?? '0', 10),
+      listeners: parseInt(t.listeners ?? '0', 10),
+      url: t.url,
+    };
+  }
 }
