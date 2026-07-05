@@ -259,7 +259,7 @@ function buildMainConfigEmbed(user: UserRow): EmbedBuilder {
     .setColor(INFO)
     .setTitle('Widget Configuration')
     .setDescription(
-      `Currently linked to **${user.lastfm_username}**`
+      `Currently linked to **${user.lastfm_username}**\n\nUse the dropdown below to configure your widget settings.`
     );
 
   if (user.last_refresh_at) {
@@ -340,11 +340,31 @@ async function handleConfig(
   const mainEmbed = buildMainConfigEmbed(user);
   let refreshUsed = false;
 
-  function getMainComponents(): ActionRowBuilder<any>[] {
-    const btn = refreshUsed ? ButtonBuilder.from(refreshBtn).setDisabled(true) : refreshBtn;
+  function getMainComponents(loading = false): ActionRowBuilder<any>[] {
+    const select = loading ? StringSelectMenuBuilder.from(settingsSelect).setDisabled(true) : settingsSelect;
+    const reauth = loading ? ButtonBuilder.from(reauthBtn).setDisabled(true) : reauthBtn;
+    const btn = refreshUsed || loading ? ButtonBuilder.from(refreshBtn).setDisabled(true) : refreshBtn;
     return [
-      new ActionRowBuilder<any>().addComponents(settingsSelect),
-      new ActionRowBuilder<any>().addComponents(reauthBtn, btn),
+      new ActionRowBuilder<any>().addComponents(select),
+      new ActionRowBuilder<any>().addComponents(reauth, btn),
+    ];
+  }
+
+  function getTypeComponents(loading = false): ActionRowBuilder<any>[] {
+    const select = loading ? StringSelectMenuBuilder.from(typeSelect).setDisabled(true) : typeSelect;
+    const back = loading ? ButtonBuilder.from(backBtn).setDisabled(true) : backBtn;
+    return [
+      new ActionRowBuilder<any>().addComponents(select),
+      new ActionRowBuilder<any>().addComponents(back),
+    ];
+  }
+
+  function getPeriodComponents(loading = false): ActionRowBuilder<any>[] {
+    const select = loading ? StringSelectMenuBuilder.from(periodSelect).setDisabled(true) : periodSelect;
+    const back = loading ? ButtonBuilder.from(backBtn).setDisabled(true) : backBtn;
+    return [
+      new ActionRowBuilder<any>().addComponents(select),
+      new ActionRowBuilder<any>().addComponents(back),
     ];
   }
 
@@ -378,10 +398,7 @@ async function handleConfig(
                 .setDescription('Choose which image appears as the primary image on your Discord profile widget.')
                 .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) }),
             ],
-            components: [
-              new ActionRowBuilder<any>().addComponents(typeSelect),
-              new ActionRowBuilder<any>().addComponents(backBtn),
-            ],
+            components: getTypeComponents(),
           });
         }
 
@@ -404,7 +421,7 @@ async function handleConfig(
         }
 
         refreshUsed = true;
-        await interaction.editReply({ components: getMainComponents() });
+        await interaction.editReply({ components: getMainComponents(true) });
 
         try {
           await refreshUserWidget(user, lastfmService);
@@ -430,6 +447,8 @@ async function handleConfig(
 
       } else if (i.customId === 'config_reauth') {
         await i.deferUpdate();
+        await interaction.editReply({ components: getMainComponents(true) });
+
         const authorizeUrl = new URL('https://discord.com/oauth2/authorize');
         authorizeUrl.searchParams.set('client_id', config.discordClientId);
         authorizeUrl.searchParams.set('response_type', 'token');
@@ -465,6 +484,8 @@ async function handleConfig(
         selectedType = i.values[0];
         if (selectedType === 'avatar' || selectedType === 'last_scrobble' || selectedType === 'last_scrobble_artist') {
           await i.deferUpdate();
+          await interaction.editReply({ components: getTypeComponents(true) });
+
           setPrimaryImageConfig(interaction.user.id, selectedType as 'avatar' | 'last_scrobble' | 'last_scrobble_artist', 'overall');
           user.primary_image_type = selectedType as 'avatar' | 'last_scrobble' | 'last_scrobble_artist';
           user.primary_image_period = 'overall';
@@ -489,15 +510,14 @@ async function handleConfig(
                 .setDescription(`Choose a time period for the **${formatConfig(selectedType)}** image.`)
                 .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) }),
             ],
-            components: [
-              new ActionRowBuilder<any>().addComponents(periodSelect),
-              new ActionRowBuilder<any>().addComponents(backBtn),
-            ],
+            components: getPeriodComponents(),
           });
         }
 
       } else if (i.customId === 'primary_period' && selectedType && i.isStringSelectMenu()) {
         await i.deferUpdate();
+        await interaction.editReply({ components: getPeriodComponents(true) });
+
         const period = i.values[0] as PrimaryImagePeriod;
         setPrimaryImageConfig(interaction.user.id, selectedType as 'artist' | 'track' | 'album', period);
         user.primary_image_type = selectedType as 'artist' | 'track' | 'album';
