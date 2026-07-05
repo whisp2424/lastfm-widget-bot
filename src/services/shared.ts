@@ -25,11 +25,36 @@ function safeFetch<T>(promise: Promise<T>, fallback: T): Promise<T> {
   return promise.catch(() => fallback);
 }
 
+function getCachedFields(user: UserRow): Map<string, DynamicField> {
+  if (!user.cached_data) return new Map();
+  try {
+    const cached: WidgetPayload = JSON.parse(user.cached_data);
+    return new Map(cached.data.dynamic.map((f) => [f.name, f]));
+  } catch {
+    return new Map();
+  }
+}
+
+function fallbackField<T extends DynamicField>(field: T, cached: Map<string, DynamicField>): T {
+  const prev = cached.get(field.name);
+  if (!prev) return field;
+
+  if (field.type === 3) {
+    const url = (field.value as { url: string }).url;
+    if (url === DEFAULT_IMAGE_URL) return prev as T;
+  } else if (field.value === '—') {
+    return prev as T;
+  }
+
+  return field;
+}
+
 export async function refreshUserWidget(
   user: UserRow,
   lastfmService: LastFmService,
 ): Promise<void> {
   const username = user.lastfm_username;
+  const cached = getCachedFields(user);
 
   const fallbackArtist = { name: '—' as const, image: null };
   const fallbackAlbum = { name: '—' as const, artist: '—' as const, cover: null };
@@ -148,9 +173,11 @@ export async function refreshUserWidget(
     { type: 3, name: 'last_scrobble_artist_picture', value: { url: recentArtistImage } },
   );
 
+  const dynamicWithFallback = dynamic.map((f) => fallbackField(f, cached));
+
   const payload: WidgetPayload = {
     username: user.hide_username ? 'Last.fm' : info.name,
-    data: { dynamic },
+    data: { dynamic: dynamicWithFallback },
   };
 
   await syncWidget(user.discord_id, payload);
