@@ -3,41 +3,50 @@ import { refreshUserWidget } from './shared.js';
 import { resetSchedulerTimer } from './scheduler.js';
 import type { LastFmService } from './lastfm.js';
 
-const POLL_INTERVAL = 45_000;
+const FAST_INTERVAL = 45_000;
+const SLOW_INTERVAL = 300_000;
 const DELAY_BETWEEN_USERS = 1_500;
+const IDLE_THRESHOLD = 3;
 
 interface TrackState {
   artist: string;
   track: string;
   nowPlaying: boolean;
+  idleCount: number;
 }
 
 export class NowPlayingMonitor {
   private lastfmService: LastFmService;
   private states = new Map<string, TrackState>();
-  private intervalHandle: ReturnType<typeof setInterval> | null = null;
+  private timeoutHandle: ReturnType<typeof setTimeout> | null = null;
 
   constructor(lastfmService: LastFmService) {
     this.lastfmService = lastfmService;
   }
 
   start(): void {
-    if (this.intervalHandle) return;
+    if (this.timeoutHandle) return;
     console.log('[nowplaying] Starting now-playing monitor');
     void this.poll();
-    this.intervalHandle = setInterval(() => void this.poll(), POLL_INTERVAL);
   }
 
   stop(): void {
-    if (this.intervalHandle) {
-      clearInterval(this.intervalHandle);
-      this.intervalHandle = null;
+    if (this.timeoutHandle) {
+      clearTimeout(this.timeoutHandle);
+      this.timeoutHandle = null;
     }
     this.states.clear();
   }
 
+  private scheduleNext(anyActive: boolean): void {
+    const delay = anyActive ? FAST_INTERVAL : SLOW_INTERVAL;
+    this.timeoutHandle = setTimeout(() => void this.poll(), delay);
+  }
+
   private async poll(): Promise<void> {
     const users = getAllAuthorizedUsers();
+    let anyActive = false;
+
     for (const user of users) {
       try {
         const recent = await this.lastfmService.getRecentTrack(user.lastfm_username);
@@ -45,6 +54,7 @@ export class NowPlayingMonitor {
           artist: recent.artist,
           track: recent.name,
           nowPlaying: recent.nowPlaying,
+          idleCount: 0,
         };
 
         const prev = this.states.get(user.discord_id);
@@ -62,12 +72,18 @@ export class NowPlayingMonitor {
           }
         }
 
+        curr.idleCount = curr.nowPlaying ? 0 : (prev?.idleCount ?? 0) + 1;
+
+        if (curr.idleCount < IDLE_THRESHOLD) anyActive = true;
+
         this.states.set(user.discord_id, curr);
         await sleep(DELAY_BETWEEN_USERS);
       } catch (err) {
         console.error(`[nowplaying] Failed to poll ${user.lastfm_username}:`, err);
       }
     }
+
+    this.scheduleNext(anyActive);
   }
 }
 
