@@ -47,6 +47,16 @@ export function getNextRefreshIn(): number | null {
   return Math.max(0, nextRefreshAt - Date.now());
 }
 
+export function resetSchedulerTimer(): void {
+  const next = Date.now() + AUTO_REFRESH_INTERVAL;
+  setSchedulerNextRefresh(new Date(next).toISOString());
+  if (timeoutHandle) {
+    clearTimeout(timeoutHandle);
+    timeoutHandle = null;
+  }
+  scheduleNext();
+}
+
 export { AUTO_REFRESH_INTERVAL };
 
 export function stopScheduler(): void {

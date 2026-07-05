@@ -12,9 +12,9 @@ import {
   type ChatInputCommandInteraction,
 } from 'discord.js';
 import { config } from '../config.js';
-import { getUser, upsertUser, setPrimaryImageConfig, deauthorizeUser, setSchedulerNextRefresh } from '../database.js';
+import { getUser, upsertUser, setPrimaryImageConfig, deauthorizeUser } from '../database.js';
 import { refreshUserWidget, CYCLE_PERIODS } from '../services/shared.js';
-import { getNextRefreshIn, AUTO_REFRESH_INTERVAL } from '../services/scheduler.js';
+import { getNextRefreshIn, resetSchedulerTimer } from '../services/scheduler.js';
 import { waitForOAuth } from '../oauth-store.js';
 import type { LastFmService } from '../services/lastfm.js';
 import type { PrimaryImagePeriod, PrimaryImageType, WidgetPayload, UserRow } from '../types.js';
@@ -202,6 +202,7 @@ async function handleSetup(
 
   try {
     await refreshUserWidget(user, lastfmService);
+    resetSchedulerTimer();
 
     await interaction.editReply({
       embeds: [
@@ -405,8 +406,7 @@ async function handleConfig(
 
         try {
           await refreshUserWidget(user, lastfmService);
-          const next = Date.now() + AUTO_REFRESH_INTERVAL;
-          setSchedulerNextRefresh(new Date(next).toISOString());
+          resetSchedulerTimer();
           getFreshUser();
           if (state === 'main') {
             await interaction.editReply({
@@ -468,6 +468,7 @@ async function handleConfig(
           user.primary_image_period = 'overall';
           try {
             await refreshUserWidget(user, lastfmService);
+            resetSchedulerTimer();
           } catch (err) {
             console.error(`[config] Refresh failed:`, err);
           }
@@ -501,6 +502,7 @@ async function handleConfig(
         user.primary_image_period = period;
         try {
           await refreshUserWidget(user, lastfmService);
+          resetSchedulerTimer();
         } catch (err) {
           console.error(`[config] Refresh failed:`, err);
         }
@@ -903,8 +905,7 @@ async function handleRefresh(
 
   try {
     await refreshUserWidget(user, lastfmService);
-    const next = Date.now() + AUTO_REFRESH_INTERVAL;
-    setSchedulerNextRefresh(new Date(next).toISOString());
+    resetSchedulerTimer();
     await interaction.editReply({
       embeds: [
         new EmbedBuilder()
