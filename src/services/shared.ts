@@ -69,6 +69,9 @@ export async function refreshUserWidget(
   const albumCover7 = orDefault(topAlbum7.cover);
   const albumCover30 = orDefault(topAlbum30.cover);
   const recentCover = orDefault(recentTrack.cover);
+  const recentArtistImage = orDefault(
+    recentTrack.name !== '—' ? await safeFetch(lastfmService.getArtistImage(recentTrack.artist), null) : null,
+  );
 
   const imageSources: Record<string, string> = {
     avatar: avatarUrl,
@@ -82,6 +85,7 @@ export async function refreshUserWidget(
     album_7d: albumCover7,
     album_30d: albumCover30,
     last_scrobble: recentCover,
+    last_scrobble_artist: recentArtistImage,
   };
 
   const hasRealImage: Record<string, boolean> = {
@@ -95,6 +99,7 @@ export async function refreshUserWidget(
     album_7d: !isDefaultImage(topAlbum7.cover),
     album_30d: !isDefaultImage(topAlbum30.cover),
     last_scrobble: !isDefaultImage(recentTrack.cover),
+    last_scrobble_artist: !isDefaultImage(recentArtistImage),
   };
 
   const primaryImage = (() => {
@@ -140,6 +145,7 @@ export async function refreshUserWidget(
     { type: 3, name: 'top_album_cover_30d', value: { url: albumCover30 } },
     { type: 3, name: 'avatar', value: { url: avatarUrl } },
     { type: 3, name: 'last_scrobble_cover', value: { url: recentCover } },
+    { type: 3, name: 'last_scrobble_artist_picture', value: { url: recentArtistImage } },
   );
 
   const payload: WidgetPayload = {
