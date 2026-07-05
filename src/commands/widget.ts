@@ -12,12 +12,13 @@ import {
   type ChatInputCommandInteraction,
 } from 'discord.js';
 import { config } from '../config.js';
-import { getUser, upsertUser, setPrimaryImageConfig, setSecondaryImageConfig, setHideUsername, setShowPeriodSuffix, setStatOrder, deauthorizeUser } from '../database.js';
+import { getUser, upsertUser, setPrimaryImageConfig, setSecondaryImageConfig, setHideUsername, deauthorizeUser, statOrderToConfig, setStatOrder } from '../database.js';
 import { refreshUserWidget, CYCLE_PERIODS } from '../services/shared.js';
 import { getNextRefreshIn, resetSchedulerTimer } from '../services/scheduler.js';
 import { waitForOAuth } from '../oauth-store.js';
 import type { LastFmService } from '../services/lastfm.js';
-import type { PrimaryImagePeriod, SecondaryImageType, SecondaryImagePeriod, WidgetPayload, UserRow, StatKey } from '../types.js';
+import { DEFAULT_STAT_ORDER } from '../types.js';
+import type { PrimaryImagePeriod, SecondaryImageType, SecondaryImagePeriod, WidgetPayload, UserRow, StatKey, StatSlotConfig, StatPeriod } from '../types.js';
 
 const SUCCESS = 0xa6e3a1;
 const ERROR = 0xba0000;
@@ -335,8 +336,8 @@ async function handleConfig(
         .setValue('secondary_image')
         .setEmoji('🖼️'),
       new StringSelectMenuOptionBuilder()
-        .setLabel('Stat Order')
-        .setDescription('Reorder which stats appear in your widget')
+        .setLabel('Widget Editor')
+        .setDescription('Customize stats, periods, and suffixes')
         .setValue('stat_order')
         .setEmoji('🔀'),
       new StringSelectMenuOptionBuilder()
@@ -371,36 +372,61 @@ async function handleConfig(
   const secondaryTypeSelect = StringSelectMenuBuilder.from(typeSelect).setCustomId('secondary_type');
   const secondaryPeriodSelect = StringSelectMenuBuilder.from(periodSelect).setCustomId('secondary_period');
 
-  const periodSuffixBtn = new ButtonBuilder()
-    .setCustomId('config_period_suffix')
-    .setLabel('Show period suffix')
-    .setStyle(ButtonStyle.Secondary);
-
-  function buildPeriodSuffixBtn(show: boolean): ButtonBuilder {
-    return ButtonBuilder.from(periodSuffixBtn)
-      .setLabel(show ? 'Hide period suffix' : 'Show period suffix')
-      .setStyle(show ? ButtonStyle.Primary : ButtonStyle.Secondary);
-  }
+  // ---- Widget Editor (was "Stat Order") ----
 
   const saveBtn = new ButtonBuilder()
     .setCustomId('stat_order_save')
     .setLabel('Save Changes')
     .setStyle(ButtonStyle.Success);
 
-  function buildStatOrderEmbed(order: StatKey[], cachedData: string | null): EmbedBuilder {
+  const resetOrderBtn = new ButtonBuilder()
+    .setCustomId('stat_order_reset')
+    .setLabel('Reset All')
+    .setStyle(ButtonStyle.Secondary);
+
+  const slotPeriodSelect = new StringSelectMenuBuilder()
+    .setCustomId('slot_period')
+    .setPlaceholder('Choose period...')
+    .addOptions(
+      new StringSelectMenuOptionBuilder().setLabel('Overall').setDescription('All-time stats').setValue('overall'),
+      new StringSelectMenuOptionBuilder().setLabel('Last 7 Days').setDescription('Stats from the past week').setValue('7d'),
+      new StringSelectMenuOptionBuilder().setLabel('Last 30 Days').setDescription('Stats from the past month').setValue('30d'),
+      new StringSelectMenuOptionBuilder().setLabel('Cycle').setDescription('Cycle through periods on each refresh').setValue('cycle'),
+    );
+
+  const slotSuffixBtn = new ButtonBuilder()
+    .setCustomId('slot_suffix')
+    .setLabel('Show period suffix')
+    .setStyle(ButtonStyle.Secondary);
+
+  function buildSlotSuffixBtn(show: boolean): ButtonBuilder {
+    return ButtonBuilder.from(slotSuffixBtn)
+      .setLabel(show ? 'Hide period suffix' : 'Show period suffix')
+      .setStyle(show ? ButtonStyle.Primary : ButtonStyle.Secondary);
+  }
+
+  function parseSlots(): StatSlotConfig[] {
+    return statOrderToConfig(user.stat_order, user.show_period_suffix === 1);
+  }
+
+  function buildWidgetEmbed(slots: StatSlotConfig[], unsaved: boolean): EmbedBuilder {
+    const title = unsaved ? 'Widget Editor (unsaved)' : 'Widget Editor';
     const embed = new EmbedBuilder()
       .setColor(INFO)
-      .setTitle('Stat Order')
-      .setDescription('Choose a slot to change its stat.');
+      .setTitle(title)
+      .setDescription('Select a slot to edit, then press **Save Changes** to apply.');
 
-    if (cachedData) {
+    if (user.cached_data) {
       try {
-        const payload: WidgetPayload = JSON.parse(cachedData);
+        const payload: WidgetPayload = JSON.parse(user.cached_data);
+        const img = payload.data.dynamic.find(f => f.name === 'primary_image');
+        if (img && img.type === 3) embed.setThumbnail((img.value as { url: string }).url);
         for (let i = 0; i < 6; i++) {
+          const slot = slots[i];
           const val = payload.data.dynamic.find(f => f.name === `stat_value_${i}`);
           const sub = payload.data.dynamic.find(f => f.name === `stat_subtitle_${i}`);
           embed.addFields({
-            name: `${STAT_KEY_LABELS[order[i]] ?? order[i]}`,
+            name: STAT_KEY_LABELS[slot.key] ?? slot.key,
             value: val ? `**${val.value}**\n${(sub?.value as string) ?? ''}` : '\u200b',
             inline: true,
           });
@@ -411,31 +437,14 @@ async function handleConfig(
     return embed;
   }
 
-  function buildStatOrderComponents(order: StatKey[], loading = false): ActionRowBuilder<any>[] {
-    const pick = loading ? StringSelectMenuBuilder.from(buildSlotPickSelect(order)).setDisabled(true) : buildSlotPickSelect(order);
-    const back = loading ? ButtonBuilder.from(backBtn).setDisabled(true) : backBtn;
-    const reset = loading ? ButtonBuilder.from(resetOrderBtn).setDisabled(true) : resetOrderBtn;
-    const suffix = loading ? ButtonBuilder.from(buildPeriodSuffixBtn(user.show_period_suffix ? true : false)).setDisabled(true) : buildPeriodSuffixBtn(user.show_period_suffix ? true : false);
-    const save = loading ? ButtonBuilder.from(saveBtn).setDisabled(true) : saveBtn;
-    return [
-      new ActionRowBuilder<any>().addComponents(pick),
-      new ActionRowBuilder<any>().addComponents(back, reset, suffix, save),
-    ];
-  }
-
-  const resetOrderBtn = new ButtonBuilder()
-    .setCustomId('stat_order_reset')
-    .setLabel('Reset All')
-    .setStyle(ButtonStyle.Secondary);
-
-  function buildSlotPickSelect(order: StatKey[]): StringSelectMenuBuilder {
+  function buildSlotPickSelect(slots: StatSlotConfig[]): StringSelectMenuBuilder {
     const select = new StringSelectMenuBuilder()
       .setCustomId('slot_pick')
-      .setPlaceholder('Choose a slot to change...');
-    order.forEach((key, i) => {
+      .setPlaceholder('Choose a slot to edit...');
+    slots.forEach((slot, i) => {
       select.addOptions(
         new StringSelectMenuOptionBuilder()
-          .setLabel(`Slot ${i + 1} (${STAT_KEY_LABELS[key] ?? key})`)
+          .setLabel(`Slot ${i + 1} (${STAT_KEY_LABELS[slot.key]})`)
           .setValue(`${i}`),
       );
     });
@@ -444,7 +453,7 @@ async function handleConfig(
 
   const statAssignSelect = new StringSelectMenuBuilder()
     .setCustomId('stat_assign')
-    .setPlaceholder('Choose a stat...')
+    .setPlaceholder('Replace with...')
     .addOptions(
       new StringSelectMenuOptionBuilder().setLabel('Scrobbles').setValue('scrobbles'),
       new StringSelectMenuOptionBuilder().setLabel('Artists').setValue('artists'),
@@ -453,6 +462,17 @@ async function handleConfig(
       new StringSelectMenuOptionBuilder().setLabel('Top Album').setValue('top_album'),
       new StringSelectMenuOptionBuilder().setLabel('Top Artist').setValue('top_artist'),
     );
+
+  function buildWidgetComponents(slots: StatSlotConfig[], loading = false): ActionRowBuilder<any>[] {
+    const pick = loading ? StringSelectMenuBuilder.from(buildSlotPickSelect(slots)).setDisabled(true) : buildSlotPickSelect(slots);
+    const back = loading ? ButtonBuilder.from(backBtn).setDisabled(true) : backBtn;
+    const reset = loading ? ButtonBuilder.from(resetOrderBtn).setDisabled(true) : resetOrderBtn;
+    const save = loading ? ButtonBuilder.from(saveBtn).setDisabled(true) : saveBtn;
+    return [
+      new ActionRowBuilder<any>().addComponents(pick),
+      new ActionRowBuilder<any>().addComponents(back, reset, save),
+    ];
+  }
 
   let selectedSlot: number | null = null;
   const mainEmbed = buildMainConfigEmbed(user);
@@ -570,20 +590,20 @@ async function handleConfig(
           state = 'stat_order';
           selectedSlot = null;
           pendingChanges = false;
-          const order: StatKey[] = JSON.parse(user.stat_order);
+          const slots = parseSlots();
           await i.update({
-            embeds: [buildStatOrderEmbed(order, user.cached_data)],
-            components: buildStatOrderComponents(order),
+            embeds: [buildWidgetEmbed(slots, false)],
+            components: buildWidgetComponents(slots),
           });
         }
 
       } else if (i.customId === 'config_back') {
         if (state === 'stat_order' && selectedSlot !== null) {
           selectedSlot = null;
-          const order: StatKey[] = JSON.parse(user.stat_order);
+          const slots = parseSlots();
           await i.update({
-            embeds: [buildStatOrderEmbed(order, user.cached_data)],
-            components: buildStatOrderComponents(order),
+            embeds: [buildWidgetEmbed(slots, pendingChanges)],
+            components: buildWidgetComponents(slots),
           });
         } else if (state === 'primary_image' && selectedType) {
           selectedType = null;
@@ -611,8 +631,7 @@ async function handleConfig(
           });
         } else {
           if (pendingChanges) {
-            setStatOrder(interaction.user.id, JSON.parse(user.stat_order) as StatKey[]);
-            setShowPeriodSuffix(interaction.user.id, user.show_period_suffix ? true : false);
+            setStatOrder(interaction.user.id, parseSlots());
             try {
               await refreshUserWidget(user, lastfmService);
               resetSchedulerTimer();
@@ -741,60 +760,85 @@ async function handleConfig(
           ],
         });
 
-      } else if (i.customId === 'config_period_suffix') {
-        user.show_period_suffix = user.show_period_suffix ? 0 : 1;
-        pendingChanges = true;
-        const order: StatKey[] = JSON.parse(user.stat_order);
-        await i.update({
-          embeds: [buildStatOrderEmbed(order, user.cached_data)],
-          components: buildStatOrderComponents(order),
-        });
-
       } else if (i.customId === 'slot_pick' && i.isStringSelectMenu()) {
         selectedSlot = parseInt(i.values[0], 10);
-        const order: StatKey[] = JSON.parse(user.stat_order);
-        const currentStat = STAT_KEY_LABELS[order[selectedSlot]] ?? order[selectedSlot];
+        const slots = parseSlots();
+        const slot = slots[selectedSlot];
+        const periodLabel = slot.period === 'cycle' ? 'Cycle' : slot.period === '7d' ? 'Last 7 Days' : slot.period === '30d' ? 'Last 30 Days' : 'Overall';
+        const suffixLabel = slot.showSuffix ? 'Shown' : 'Hidden';
+
+        let statValue = '\u200b';
+        if (user.cached_data) {
+          try {
+            const payload: WidgetPayload = JSON.parse(user.cached_data);
+            const val = payload.data.dynamic.find(f => f.name === `stat_value_${selectedSlot}`);
+            if (val) statValue = `**${val.value}**`;
+          } catch {}
+        }
+
         await i.update({
           embeds: [
             new EmbedBuilder()
               .setColor(INFO)
-              .setTitle('Stat Order')
-              .setDescription(`Choose a stat for **Slot ${selectedSlot + 1}** (currently ${currentStat}).`),
+              .setTitle(`Slot ${selectedSlot + 1}: ${STAT_KEY_LABELS[slot.key]}`)
+              .setDescription(`${statValue}\n\n**Period:** ${periodLabel}\n**Suffix:** ${suffixLabel}`),
           ],
           components: [
             new ActionRowBuilder<any>().addComponents(statAssignSelect),
-            new ActionRowBuilder<any>().addComponents(backBtn),
+            new ActionRowBuilder<any>().addComponents(slotPeriodSelect),
+            new ActionRowBuilder<any>().addComponents(backBtn, buildSlotSuffixBtn(slot.showSuffix)),
           ],
         });
 
       } else if (i.customId === 'stat_assign' && i.isStringSelectMenu() && selectedSlot !== null) {
         const newStat = i.values[0] as StatKey;
-        const order: StatKey[] = JSON.parse(user.stat_order);
-        order[selectedSlot] = newStat;
-        user.stat_order = JSON.stringify(order);
+        const slots = parseSlots();
+        slots[selectedSlot] = { ...slots[selectedSlot], key: newStat };
+        user.stat_order = JSON.stringify(slots);
         pendingChanges = true;
-
         selectedSlot = null;
         await i.update({
-          embeds: [buildStatOrderEmbed(order, user.cached_data)],
-          components: buildStatOrderComponents(order),
+          embeds: [buildWidgetEmbed(slots, true)],
+          components: buildWidgetComponents(slots),
+        });
+
+      } else if (i.customId === 'slot_period' && i.isStringSelectMenu() && selectedSlot !== null) {
+        const period = i.values[0] as StatPeriod;
+        const slots = parseSlots();
+        slots[selectedSlot] = { ...slots[selectedSlot], period };
+        user.stat_order = JSON.stringify(slots);
+        pendingChanges = true;
+        selectedSlot = null;
+        await i.update({
+          embeds: [buildWidgetEmbed(slots, true)],
+          components: buildWidgetComponents(slots),
+        });
+
+      } else if (i.customId === 'slot_suffix' && selectedSlot !== null) {
+        const slots = parseSlots();
+        slots[selectedSlot] = { ...slots[selectedSlot], showSuffix: !slots[selectedSlot].showSuffix };
+        user.stat_order = JSON.stringify(slots);
+        pendingChanges = true;
+        selectedSlot = null;
+        await i.update({
+          embeds: [buildWidgetEmbed(slots, true)],
+          components: buildWidgetComponents(slots),
         });
 
       } else if (i.customId === 'stat_order_reset') {
-        const defaultOrder = ['scrobbles', 'artists', 'loved_tracks', 'top_track', 'top_album', 'top_artist'] as StatKey[];
-        user.stat_order = JSON.stringify(defaultOrder);
+        user.stat_order = JSON.stringify(DEFAULT_STAT_ORDER);
         pendingChanges = true;
         await i.update({
-          embeds: [buildStatOrderEmbed(defaultOrder, user.cached_data)],
-          components: buildStatOrderComponents(defaultOrder),
+          embeds: [buildWidgetEmbed(DEFAULT_STAT_ORDER, true)],
+          components: buildWidgetComponents(DEFAULT_STAT_ORDER),
         });
 
       } else if (i.customId === 'stat_order_save') {
         await i.deferUpdate();
-        await interaction.editReply({ components: buildStatOrderComponents(JSON.parse(user.stat_order), true) });
+        const slots = parseSlots();
+        await interaction.editReply({ components: buildWidgetComponents(slots, true) });
 
-        setStatOrder(interaction.user.id, JSON.parse(user.stat_order) as StatKey[]);
-        setShowPeriodSuffix(interaction.user.id, user.show_period_suffix ? true : false);
+        setStatOrder(interaction.user.id, slots);
 
         try {
           await refreshUserWidget(user, lastfmService);
@@ -805,10 +849,10 @@ async function handleConfig(
         getFreshUser();
         pendingChanges = false;
 
-        const order: StatKey[] = JSON.parse(user.stat_order);
+        const freshSlots = parseSlots();
         await interaction.editReply({
-          embeds: [buildStatOrderEmbed(order, user.cached_data)],
-          components: buildStatOrderComponents(order),
+          embeds: [buildWidgetEmbed(freshSlots, false)],
+          components: buildWidgetComponents(freshSlots),
         });
 
       } else if (i.customId === 'primary_type' && i.isStringSelectMenu()) {

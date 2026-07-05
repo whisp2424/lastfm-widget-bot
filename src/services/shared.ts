@@ -1,8 +1,8 @@
-import { updateRefresh, advanceCycleIndex } from '../database.js';
+import { updateRefresh, advanceCycleIndex, statOrderToConfig } from '../database.js';
 import { syncWidget } from './discord.js';
 import { isDefaultImage } from './lastfm.js';
 import type { LastFmService } from './lastfm.js';
-import type { UserRow, DynamicField, WidgetPayload, StatKey } from '../types.js';
+import type { UserRow, DynamicField, WidgetPayload, StatKey, StatSlotConfig } from '../types.js';
 import { DEFAULT_SUBTITLES } from '../types.js';
 
 const DEFAULT_IMAGE_URL = 'https://lastfm.freetls.fastly.net/i/u/500x500/2a96cbd8b46e442fc41c2b86b821562f.png';
@@ -117,10 +117,8 @@ export async function refreshUserWidget(
   ]);
 
   const shouldCycle = user.primary_image_period === 'cycle' || user.secondary_image_period === 'cycle';
-  const currentPeriod = shouldCycle ? CYCLE_PERIODS[user.cycle_index] : 'overall';
-
-  const statOrder: StatKey[] = JSON.parse(user.stat_order);
-  const showSuffix = user.show_period_suffix === 1;
+  const globalCyclePeriod = shouldCycle ? CYCLE_PERIODS[user.cycle_index] : null;
+  const statSlots = statOrderToConfig(user.stat_order, user.show_period_suffix === 1);
 
   const avatarUrl = orDefault(
     info.image?.find((i) => i.size === 'extralarge')?.['#text']?.replace('/300x300/', '/500x500/'),
@@ -197,12 +195,13 @@ export async function refreshUserWidget(
     },
   ];
 
-  statOrder.forEach((key, i) => {
-    const baseSubtitle = DEFAULT_SUBTITLES[key] ?? '';
-    const subtitle = showSuffix ? `${baseSubtitle} (${getPeriodLabel(currentPeriod)})` : baseSubtitle;
+  statSlots.forEach((slot, i) => {
+    const effectivePeriod = slot.period === 'cycle' && globalCyclePeriod ? globalCyclePeriod : slot.period;
+    const baseSubtitle = DEFAULT_SUBTITLES[slot.key] ?? '';
+    const subtitle = slot.showSuffix ? `${baseSubtitle} (${getPeriodLabel(effectivePeriod)})` : baseSubtitle;
     dynamic.push(
       { type: 1, name: `stat_subtitle_${i}`, value: subtitle },
-      { type: 1, name: `stat_value_${i}`, value: getStatValue(key, info, lovedCount, currentPeriod, topTrack, topTrack7, topTrack30, topArtist, topArtist7, topArtist30, topAlbum, topAlbum7, topAlbum30) },
+      { type: 1, name: `stat_value_${i}`, value: getStatValue(slot.key, info, lovedCount, effectivePeriod, topTrack, topTrack7, topTrack30, topArtist, topArtist7, topArtist30, topAlbum, topAlbum7, topAlbum30) },
     );
   });
 

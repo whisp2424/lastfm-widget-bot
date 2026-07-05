@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
-import type { UserRow, PrimaryImageType, PrimaryImagePeriod, SecondaryImageType, SecondaryImagePeriod, StatKey } from './types.js';
+import type { UserRow, PrimaryImageType, PrimaryImagePeriod, SecondaryImageType, SecondaryImagePeriod, StatSlotConfig, StatKey } from './types.js';
 
 const DB_PATH = path.join(process.cwd(), 'widget.db');
 
@@ -141,10 +141,33 @@ export function setHideUsername(discordId: string, hide: boolean): void {
   `).run(hide ? 1 : 0, discordId);
 }
 
-export function setStatOrder(discordId: string, order: StatKey[]): void {
+export function setStatOrder(discordId: string, order: StatSlotConfig[]): void {
   getDb().prepare(`
     UPDATE users SET stat_order = ? WHERE discord_id = ?
   `).run(JSON.stringify(order), discordId);
+}
+
+export function statOrderToConfig(statOrder: string, oldShowSuffix = false): StatSlotConfig[] {
+  try {
+    const parsed = JSON.parse(statOrder);
+    if (Array.isArray(parsed) && typeof parsed[0] === 'string') {
+      return parsed.map((key: string) => ({
+        key: key as StatKey,
+        period: 'overall' as const,
+        showSuffix: oldShowSuffix,
+      }));
+    }
+    return parsed as StatSlotConfig[];
+  } catch {
+    return [
+      { key: 'scrobbles', period: 'overall', showSuffix: false },
+      { key: 'artists', period: 'overall', showSuffix: false },
+      { key: 'loved_tracks', period: 'overall', showSuffix: false },
+      { key: 'top_track', period: 'overall', showSuffix: false },
+      { key: 'top_album', period: 'overall', showSuffix: false },
+      { key: 'top_artist', period: 'overall', showSuffix: false },
+    ];
+  }
 }
 
 export function setShowPeriodSuffix(discordId: string, show: boolean): void {

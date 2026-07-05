@@ -5,8 +5,22 @@ export type SecondaryImageType = PrimaryImageType;
 export type SecondaryImagePeriod = PrimaryImagePeriod;
 
 export type StatKey = 'scrobbles' | 'artists' | 'loved_tracks' | 'top_track' | 'top_album' | 'top_artist';
+export type StatPeriod = 'overall' | '7d' | '30d' | 'cycle';
 
-export const DEFAULT_STAT_ORDER: StatKey[] = ['scrobbles', 'artists', 'loved_tracks', 'top_track', 'top_album', 'top_artist'];
+export interface StatSlotConfig {
+  key: StatKey;
+  period: StatPeriod;
+  showSuffix: boolean;
+}
+
+export const DEFAULT_STAT_ORDER: StatSlotConfig[] = [
+  { key: 'scrobbles', period: 'overall', showSuffix: false },
+  { key: 'artists', period: 'overall', showSuffix: false },
+  { key: 'loved_tracks', period: 'overall', showSuffix: false },
+  { key: 'top_track', period: 'overall', showSuffix: false },
+  { key: 'top_album', period: 'overall', showSuffix: false },
+  { key: 'top_artist', period: 'overall', showSuffix: false },
+];
 
 export const DEFAULT_SUBTITLES: Record<StatKey, string> = {
   scrobbles: 'Scrobbles',
