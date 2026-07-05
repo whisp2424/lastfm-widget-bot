@@ -381,25 +381,42 @@ async function handleConfig(
     .setCustomId('config_period_suffix')
     .setPlaceholder('Choose visibility...')
     .addOptions(
-      new StringSelectMenuOptionBuilder().setLabel('Show').setDescription('Show period labels in subtitles (e.g. "Scrobbles (overall)")').setValue('show').setEmoji('👁️'),
-      new StringSelectMenuOptionBuilder().setLabel('Hide').setDescription('Hide period labels in subtitles (e.g. "Scrobbles")').setValue('hide').setEmoji('🙈'),
+      new StringSelectMenuOptionBuilder().setLabel('Show').setDescription('Show period labels in subtitles (e.g. "Scrobbles (overall)")').setValue('show'),
+      new StringSelectMenuOptionBuilder().setLabel('Hide').setDescription('Hide period labels in subtitles (e.g. "Scrobbles")').setValue('hide'),
     );
-
-  const moveUpBtn = new ButtonBuilder()
-    .setCustomId('stat_order_up')
-    .setLabel('▲ Rotate Up')
-    .setStyle(ButtonStyle.Secondary);
-
-  const moveDownBtn = new ButtonBuilder()
-    .setCustomId('stat_order_down')
-    .setLabel('▼ Rotate Down')
-    .setStyle(ButtonStyle.Secondary);
 
   const resetOrderBtn = new ButtonBuilder()
     .setCustomId('stat_order_reset')
-    .setLabel('Reset')
-    .setStyle(ButtonStyle.Danger);
+    .setLabel('Reset All')
+    .setStyle(ButtonStyle.Secondary);
 
+  function buildSlotPickSelect(order: StatKey[]): StringSelectMenuBuilder {
+    const select = new StringSelectMenuBuilder()
+      .setCustomId('slot_pick')
+      .setPlaceholder('Choose a slot to change...');
+    order.forEach((key, i) => {
+      select.addOptions(
+        new StringSelectMenuOptionBuilder()
+          .setLabel(`Slot ${i + 1} (${STAT_KEY_LABELS[key] ?? key})`)
+          .setValue(`${i}`),
+      );
+    });
+    return select;
+  }
+
+  const statAssignSelect = new StringSelectMenuBuilder()
+    .setCustomId('stat_assign')
+    .setPlaceholder('Choose a stat...')
+    .addOptions(
+      new StringSelectMenuOptionBuilder().setLabel('Scrobbles').setValue('scrobbles'),
+      new StringSelectMenuOptionBuilder().setLabel('Artists').setValue('artists'),
+      new StringSelectMenuOptionBuilder().setLabel('Loved Tracks').setValue('loved_tracks'),
+      new StringSelectMenuOptionBuilder().setLabel('Top Track').setValue('top_track'),
+      new StringSelectMenuOptionBuilder().setLabel('Top Album').setValue('top_album'),
+      new StringSelectMenuOptionBuilder().setLabel('Top Artist').setValue('top_artist'),
+    );
+
+  let selectedSlot: number | null = null;
   const mainEmbed = buildMainConfigEmbed(user);
   let refreshUsed = false;
 
@@ -512,18 +529,19 @@ async function handleConfig(
           });
         } else if (value === 'stat_order') {
           state = 'stat_order';
+          selectedSlot = null;
           const order: StatKey[] = JSON.parse(user.stat_order);
-          const orderList = order.map((k, i) => `${i + 1}. ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
+          const orderList = order.map((k, i) => `Slot ${i + 1}: ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
           await i.update({
             embeds: [
               new EmbedBuilder()
                 .setColor(INFO)
                 .setTitle('Stat Order')
-                .setDescription(`Current stat order:\n${orderList}\n\nUse the buttons to reorder. Select a stat first.`),
+                .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`),
             ],
             components: [
-              new ActionRowBuilder<any>().addComponents(moveUpBtn, moveDownBtn, resetOrderBtn),
-              new ActionRowBuilder<any>().addComponents(backBtn),
+              new ActionRowBuilder<any>().addComponents(buildSlotPickSelect(order)),
+              new ActionRowBuilder<any>().addComponents(backBtn, resetOrderBtn),
             ],
           });
         } else if (value === 'period_suffix') {
@@ -544,12 +562,30 @@ async function handleConfig(
         }
 
       } else if (i.customId === 'config_back') {
-        state = 'main';
-        getFreshUser();
-        await i.update({
-          embeds: [buildMainConfigEmbed(user)],
-          components: getMainComponents(),
-        });
+        if (state === 'stat_order' && selectedSlot !== null) {
+          selectedSlot = null;
+          const order: StatKey[] = JSON.parse(user.stat_order);
+          const orderList = order.map((k, j) => `Slot ${j + 1}: ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
+          await i.update({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(INFO)
+                .setTitle('Stat Order')
+                .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`),
+            ],
+            components: [
+              new ActionRowBuilder<any>().addComponents(buildSlotPickSelect(order)),
+              new ActionRowBuilder<any>().addComponents(backBtn, resetOrderBtn),
+            ],
+          });
+        } else {
+          state = 'main';
+          getFreshUser();
+          await i.update({
+            embeds: [buildMainConfigEmbed(user)],
+            components: getMainComponents(),
+          });
+        }
 
       } else if (i.customId === 'config_refresh') {
         await i.deferUpdate();
@@ -707,28 +743,30 @@ async function handleConfig(
           ],
         });
 
-      } else if (i.customId === 'stat_order_up') {
-        await i.deferUpdate();
+      } else if (i.customId === 'slot_pick' && i.isStringSelectMenu()) {
+        selectedSlot = parseInt(i.values[0], 10);
         const order: StatKey[] = JSON.parse(user.stat_order);
-        if (order.length < 2) return;
-        const first = order.shift()!;
-        order.push(first);
-        setStatOrder(interaction.user.id, order);
-        user.stat_order = JSON.stringify(order);
-
-        const orderList = order.map((k, j) => `${j + 1}. ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
-        await interaction.editReply({
+        const currentStat = STAT_KEY_LABELS[order[selectedSlot]] ?? order[selectedSlot];
+        await i.update({
           embeds: [
             new EmbedBuilder()
               .setColor(INFO)
               .setTitle('Stat Order')
-              .setDescription(`Current stat order:\n${orderList}\n\nUse the buttons to reorder.`),
+              .setDescription(`Choose a stat for **Slot ${selectedSlot + 1}** (currently ${currentStat}).`),
           ],
           components: [
-            new ActionRowBuilder<any>().addComponents(moveUpBtn, moveDownBtn, resetOrderBtn),
+            new ActionRowBuilder<any>().addComponents(statAssignSelect),
             new ActionRowBuilder<any>().addComponents(backBtn),
           ],
         });
+
+      } else if (i.customId === 'stat_assign' && i.isStringSelectMenu() && selectedSlot !== null) {
+        await i.deferUpdate();
+        const newStat = i.values[0] as StatKey;
+        const order: StatKey[] = JSON.parse(user.stat_order);
+        order[selectedSlot] = newStat;
+        setStatOrder(interaction.user.id, order);
+        user.stat_order = JSON.stringify(order);
 
         try {
           await refreshUserWidget(user, lastfmService);
@@ -736,64 +774,53 @@ async function handleConfig(
         } catch (err) {
           console.error(`[config] Refresh failed:`, err);
         }
+        getFreshUser();
 
-      } else if (i.customId === 'stat_order_down') {
-        await i.deferUpdate();
-        const order: StatKey[] = JSON.parse(user.stat_order);
-        if (order.length < 2) return;
-        const last = order.pop()!;
-        order.unshift(last);
-        setStatOrder(interaction.user.id, order);
-        user.stat_order = JSON.stringify(order);
-
-        const orderList = order.map((k, j) => `${j + 1}. ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
+        selectedSlot = null;
+        const updatedOrder: StatKey[] = JSON.parse(user.stat_order);
+        const orderList = updatedOrder.map((k, i) => `Slot ${i + 1}: ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
         await interaction.editReply({
           embeds: [
             new EmbedBuilder()
               .setColor(INFO)
               .setTitle('Stat Order')
-              .setDescription(`Current stat order:\n${orderList}\n\nUse the buttons to reorder.`),
+              .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`),
           ],
           components: [
-            new ActionRowBuilder<any>().addComponents(moveUpBtn, moveDownBtn, resetOrderBtn),
-            new ActionRowBuilder<any>().addComponents(backBtn),
+            new ActionRowBuilder<any>().addComponents(buildSlotPickSelect(updatedOrder)),
+            new ActionRowBuilder<any>().addComponents(backBtn, resetOrderBtn),
           ],
         });
-
-        try {
-          await refreshUserWidget(user, lastfmService);
-          resetSchedulerTimer();
-        } catch (err) {
-          console.error(`[config] Refresh failed:`, err);
-        }
 
       } else if (i.customId === 'stat_order_reset') {
         await i.deferUpdate();
+        selectedSlot = null;
         const defaultOrder = ['scrobbles', 'artists', 'loved_tracks', 'top_track', 'top_album', 'top_artist'] as StatKey[];
         setStatOrder(interaction.user.id, defaultOrder);
         user.stat_order = JSON.stringify(defaultOrder);
 
-        getFreshUser();
-        const orderList = defaultOrder.map((k, j) => `${j + 1}. ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
-        await interaction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(INFO)
-              .setTitle('Stat Order')
-              .setDescription(`Current stat order:\n${orderList}\n\nUse the buttons to reorder. Select a stat first.`),
-          ],
-          components: [
-            new ActionRowBuilder<any>().addComponents(moveUpBtn, moveDownBtn, resetOrderBtn),
-            new ActionRowBuilder<any>().addComponents(backBtn),
-          ],
-        });
-
         try {
           await refreshUserWidget(user, lastfmService);
           resetSchedulerTimer();
         } catch (err) {
           console.error(`[config] Refresh failed:`, err);
         }
+        getFreshUser();
+
+        const updatedOrder: StatKey[] = JSON.parse(user.stat_order);
+        const orderList = updatedOrder.map((k, i) => `Slot ${i + 1}: ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(INFO)
+              .setTitle('Stat Order')
+              .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`),
+          ],
+          components: [
+            new ActionRowBuilder<any>().addComponents(buildSlotPickSelect(updatedOrder)),
+            new ActionRowBuilder<any>().addComponents(backBtn, resetOrderBtn),
+          ],
+        });
 
       } else if (i.customId === 'primary_type' && i.isStringSelectMenu()) {
         selectedType = i.values[0];
