@@ -34,6 +34,8 @@ export async function syncWidget(
 
     if (body?.code === 50035 && hasMismatchError(body)) {
       response = await patchWidget('0', discordUserId, payload);
+    } else {
+      throw new Error(`Discord API error (${response.status}): ${text}`);
     }
   }
 
