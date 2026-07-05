@@ -7,7 +7,7 @@ export async function syncWidget(
   discordUserId: string,
   payload: WidgetPayload,
 ): Promise<void> {
-  const url = `${API_BASE}/applications/${config.discordClientId}/users/${discordUserId}/identities/0/profile`;
+  const url = `${API_BASE}/applications/${config.discordClientId}/users/${discordUserId}/identities/${discordUserId}/profile`;
 
   const response = await fetch(url, {
     method: 'PATCH',
