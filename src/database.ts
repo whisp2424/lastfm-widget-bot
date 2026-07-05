@@ -52,6 +52,11 @@ function initSchema(): void {
   } catch {
     // column already exists
   }
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN hide_username INTEGER NOT NULL DEFAULT 0`);
+  } catch {
+    // column already exists
+  }
 }
 
 export function upsertUser(discordId: string, lastfmUsername: string): void {
@@ -102,6 +107,12 @@ export function setPrimaryImageConfig(
     UPDATE users SET primary_image_type = ?, primary_image_period = ?, cycle_index = 0 WHERE discord_id = ?
   `);
   stmt.run(type, period, discordId);
+}
+
+export function setHideUsername(discordId: string, hide: boolean): void {
+  getDb().prepare(`
+    UPDATE users SET hide_username = ? WHERE discord_id = ?
+  `).run(hide ? 1 : 0, discordId);
 }
 
 export function advanceCycleIndex(discordId: string): void {

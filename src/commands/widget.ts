@@ -12,7 +12,7 @@ import {
   type ChatInputCommandInteraction,
 } from 'discord.js';
 import { config } from '../config.js';
-import { getUser, upsertUser, setPrimaryImageConfig, deauthorizeUser } from '../database.js';
+import { getUser, upsertUser, setPrimaryImageConfig, deauthorizeUser, setHideUsername } from '../database.js';
 import { refreshUserWidget, CYCLE_PERIODS } from '../services/shared.js';
 import { getNextRefreshIn, resetSchedulerTimer } from '../services/scheduler.js';
 import { waitForOAuth } from '../oauth-store.js';
@@ -304,6 +304,11 @@ async function handleConfig(
     .setLabel('Back')
     .setStyle(ButtonStyle.Secondary);
 
+  const hideUsernameBtn = new ButtonBuilder()
+    .setCustomId('config_toggle_hide')
+    .setLabel('...')
+    .setStyle(ButtonStyle.Secondary);
+
   const settingsSelect = new StringSelectMenuBuilder()
     .setCustomId('config_select')
     .setPlaceholder('Select a setting...')
@@ -313,6 +318,11 @@ async function handleConfig(
         .setDescription('Choose which image takes priority in your widget')
         .setValue('primary_image')
         .setEmoji('🖼️'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Hide Username')
+        .setDescription('Replace your username with "Last.fm" in the widget')
+        .setValue('hide_username')
+        .setEmoji('👤'),
     );
 
   const typeSelect = new StringSelectMenuBuilder()
@@ -370,7 +380,7 @@ async function handleConfig(
 
   const reply = await interaction.editReply({ embeds: [mainEmbed], components: getMainComponents() });
 
-  let state: 'main' | 'primary_image' = 'main';
+  let state: 'main' | 'primary_image' | 'hide_username' = 'main';
   let selectedType: string | null = null;
 
   function getFreshUser(): void {
@@ -399,6 +409,24 @@ async function handleConfig(
                 .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) }),
             ],
             components: getTypeComponents(),
+          });
+        } else if (value === 'hide_username') {
+          state = 'hide_username';
+          await i.update({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(INFO)
+                .setTitle('Hide Username')
+                .setDescription(`When enabled, your widget will show "Last.fm" instead of your username.`),
+            ],
+            components: [
+              new ActionRowBuilder<any>().addComponents(
+                ButtonBuilder.from(hideUsernameBtn)
+                  .setLabel(user.hide_username ? 'On' : 'Off')
+                  .setStyle(user.hide_username ? ButtonStyle.Success : ButtonStyle.Danger),
+              ),
+              new ActionRowBuilder<any>().addComponents(backBtn),
+            ],
           });
         }
 
@@ -479,6 +507,41 @@ async function handleConfig(
             components: getMainComponents(),
           });
         }
+
+      } else if (i.customId === 'config_toggle_hide' && i.isButton()) {
+        await i.deferUpdate();
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(INFO)
+              .setTitle('Hide Username')
+              .setDescription(`When enabled, your widget will show "Last.fm" instead of your username.`),
+          ],
+          components: [
+            new ActionRowBuilder<any>().addComponents(
+              ButtonBuilder.from(hideUsernameBtn).setDisabled(true),
+            ),
+            new ActionRowBuilder<any>().addComponents(ButtonBuilder.from(backBtn).setDisabled(true)),
+          ],
+        });
+
+        const newHide = !user.hide_username;
+        setHideUsername(interaction.user.id, newHide);
+        user.hide_username = newHide ? 1 : 0;
+
+        try {
+          await refreshUserWidget(user, lastfmService);
+          resetSchedulerTimer();
+        } catch (err) {
+          console.error(`[config] Refresh failed:`, err);
+        }
+        getFreshUser();
+
+        state = 'main';
+        await interaction.editReply({
+          embeds: [buildMainConfigEmbed(user)],
+          components: getMainComponents(),
+        });
 
       } else if (i.customId === 'primary_type' && i.isStringSelectMenu()) {
         selectedType = i.values[0];

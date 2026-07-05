@@ -11,6 +11,7 @@ export interface UserRow {
   primary_image_type: PrimaryImageType;
   primary_image_period: PrimaryImagePeriod;
   cycle_index: number;
+  hide_username: number;
 }
 
 export interface DynamicField {

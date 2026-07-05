@@ -149,7 +149,7 @@ export async function refreshUserWidget(
   );
 
   const payload: WidgetPayload = {
-    username: info.name,
+    username: user.hide_username ? 'Last.fm' : info.name,
     data: { dynamic },
   };
 
