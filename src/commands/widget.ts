@@ -258,9 +258,8 @@ function buildMainConfigEmbed(user: UserRow): EmbedBuilder {
   const embed = new EmbedBuilder()
     .setColor(INFO)
     .setTitle('Widget Configuration')
-    .setDescription(
-      `Currently linked to **${user.lastfm_username}**\n\nUse the dropdown below to configure your widget settings.`
-    );
+    .setDescription('Use the dropdown below to configure your widget settings.')
+    .addFields({ name: 'Linked Account', value: `**${user.lastfm_username}**`, inline: false });
 
   if (user.last_refresh_at) {
     embed.addFields({ name: 'Last Refreshed', value: timeAgo(user.last_refresh_at), inline: false });
@@ -268,7 +267,7 @@ function buildMainConfigEmbed(user: UserRow): EmbedBuilder {
 
   const nextIn = getNextRefreshIn();
   if (nextIn !== null) {
-    embed.addFields({ name: 'Next Auto-Refresh', value: formatTimeLeft(nextIn), inline: false });
+    embed.addFields({ name: 'Next Auto-Refresh', value: formatTimeLeft(nextIn), inline: true });
   }
 
   return embed;
