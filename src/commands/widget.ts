@@ -577,6 +577,30 @@ async function handleConfig(
               new ActionRowBuilder<any>().addComponents(backBtn, resetOrderBtn),
             ],
           });
+        } else if (state === 'primary_image' && selectedType) {
+          selectedType = null;
+          await i.update({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(INFO)
+                .setTitle('Primary Image')
+                .setDescription('Choose which image appears as the primary image on your Discord profile widget.')
+                .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) }),
+            ],
+            components: getTypeComponents(),
+          });
+        } else if (state === 'secondary_image' && selectedSecondaryType) {
+          selectedSecondaryType = null;
+          await i.update({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(INFO)
+                .setTitle('Secondary Image')
+                .setDescription('Choose which image appears as the secondary image on your Discord profile widget.')
+                .addFields({ name: 'Current', value: formatConfig(user.secondary_image_type, user.secondary_image_period) }),
+            ],
+            components: getSecondaryTypeComponents(),
+          });
         } else {
           state = 'main';
           getFreshUser();
