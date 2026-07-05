@@ -1,4 +1,4 @@
-export type PrimaryImageType = 'avatar' | 'artist' | 'track' | 'album' | 'last_scrobble';
+export type PrimaryImageType = 'avatar' | 'artist' | 'track' | 'album' | 'last_scrobble' | 'last_scrobble_artist';
 export type PrimaryImagePeriod = 'overall' | '7d' | '30d' | 'cycle';
 
 export interface UserRow {

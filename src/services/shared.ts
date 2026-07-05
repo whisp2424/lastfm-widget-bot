@@ -103,7 +103,7 @@ export async function refreshUserWidget(
   };
 
   const primaryImage = (() => {
-    if (user.primary_image_type === 'avatar' || user.primary_image_type === 'last_scrobble') {
+    if (user.primary_image_type === 'avatar' || user.primary_image_type === 'last_scrobble' || user.primary_image_type === 'last_scrobble_artist') {
       return imageSources[user.primary_image_type];
     }
     const period = user.primary_image_period === 'cycle'

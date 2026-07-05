@@ -234,6 +234,7 @@ async function handleSetup(
 function formatConfig(type: string, period?: string): string {
   if (type === 'avatar') return 'Avatar';
   if (type === 'last_scrobble') return 'Last Scrobble';
+  if (type === 'last_scrobble_artist') return 'Last Scrobble Artist';
   const periodLabel = period === '7d' ? 'Last 7 Days' : period === '30d' ? 'Last 30 Days' : period === 'cycle' ? 'Cycle' : 'Overall';
   return `Top ${type.charAt(0).toUpperCase() + type.slice(1)} (${periodLabel})`;
 }
@@ -323,6 +324,7 @@ async function handleConfig(
       new StringSelectMenuOptionBuilder().setLabel('Top Track').setDescription('Show your top track album cover').setValue('track').setEmoji('🎵'),
       new StringSelectMenuOptionBuilder().setLabel('Top Album').setDescription('Show your top album cover').setValue('album').setEmoji('💿'),
       new StringSelectMenuOptionBuilder().setLabel('Last Scrobble').setDescription('Show the cover of your most recent scrobble').setValue('last_scrobble').setEmoji('🔄'),
+      new StringSelectMenuOptionBuilder().setLabel('Last Scrobble Artist').setDescription("Show your most recent scrobble's artist picture").setValue('last_scrobble_artist').setEmoji('🎨'),
     );
 
   const periodSelect = new StringSelectMenuBuilder()
@@ -461,10 +463,10 @@ async function handleConfig(
 
       } else if (i.customId === 'primary_type' && i.isStringSelectMenu()) {
         selectedType = i.values[0];
-        if (selectedType === 'avatar' || selectedType === 'last_scrobble') {
+        if (selectedType === 'avatar' || selectedType === 'last_scrobble' || selectedType === 'last_scrobble_artist') {
           await i.deferUpdate();
-          setPrimaryImageConfig(interaction.user.id, selectedType as 'avatar' | 'last_scrobble', 'overall');
-          user.primary_image_type = selectedType as 'avatar' | 'last_scrobble';
+          setPrimaryImageConfig(interaction.user.id, selectedType as 'avatar' | 'last_scrobble' | 'last_scrobble_artist', 'overall');
+          user.primary_image_type = selectedType as 'avatar' | 'last_scrobble' | 'last_scrobble_artist';
           user.primary_image_period = 'overall';
           try {
             await refreshUserWidget(user, lastfmService);
@@ -730,6 +732,7 @@ async function handleImage(
   const periodLabel = getPeriodLabel(effectivePeriod);
   const typeTitle = type === 'avatar' ? 'Avatar'
     : type === 'last_scrobble' ? 'Last Scrobble'
+    : type === 'last_scrobble_artist' ? 'Last Scrobble Artist'
     : `Top ${type.charAt(0).toUpperCase() + type.slice(1)}`;
   const title = periodLabel ? `${typeTitle} — ${periodLabel}` : typeTitle;
 
@@ -776,6 +779,28 @@ async function handleImage(
     linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View on Last.fm').setURL(trackUrl),
       new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(`View in ${possessive(user.lastfm_username)} Library`).setURL(`${userUrl}/library/music/${enc(recent.artist)}/_/${enc(recent.name)}`),
+    );
+
+  } else if (type === 'last_scrobble_artist') {
+    const recent = await lastfmService.getRecentTrack(user.lastfm_username);
+    const raw = await lastfmService.getArtistInfo(recent.artist).catch(() => null);
+
+    embed = buildArtistEmbed(
+      recent.artist,
+      {
+        tags: raw?.tags?.length ? raw.tags.slice(0, 8).map(tagLink).join(', ') : '',
+        similar: raw?.similar?.length ? raw.similar.slice(0, 5).map(artistLink).join(', ') : '',
+        playcount: raw?.playcount ?? 0,
+        listeners: raw?.listeners ?? 0,
+        bio: raw?.bio ?? '',
+      },
+      primaryImageUrl,
+      title,
+    );
+
+    linkButtons = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('View on Last.fm').setURL(`${publicBase}${enc(recent.artist)}`),
+      new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel(`View in ${possessive(user.lastfm_username)} Library`).setURL(`${userUrl}/library/music/${enc(recent.artist)}`),
     );
 
   } else if (type === 'artist') {
