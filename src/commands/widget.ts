@@ -373,13 +373,54 @@ async function handleConfig(
 
   const periodSuffixBtn = new ButtonBuilder()
     .setCustomId('config_period_suffix')
-    .setLabel('Suffix: Shown')
-    .setStyle(ButtonStyle.Primary);
+    .setLabel('Show period suffix')
+    .setStyle(ButtonStyle.Secondary);
 
   function buildPeriodSuffixBtn(show: boolean): ButtonBuilder {
     return ButtonBuilder.from(periodSuffixBtn)
-      .setLabel(show ? 'Suffix: Shown' : 'Suffix: Hidden')
+      .setLabel(show ? 'Hide period suffix' : 'Show period suffix')
       .setStyle(show ? ButtonStyle.Primary : ButtonStyle.Secondary);
+  }
+
+  const saveBtn = new ButtonBuilder()
+    .setCustomId('stat_order_save')
+    .setLabel('Save Changes')
+    .setStyle(ButtonStyle.Success);
+
+  function buildStatOrderEmbed(order: StatKey[], cachedData: string | null): EmbedBuilder {
+    const embed = new EmbedBuilder()
+      .setColor(INFO)
+      .setTitle('Stat Order')
+      .setDescription('Choose a slot to change its stat.');
+
+    if (cachedData) {
+      try {
+        const payload: WidgetPayload = JSON.parse(cachedData);
+        for (let i = 0; i < 6; i++) {
+          const val = payload.data.dynamic.find(f => f.name === `stat_value_${i}`);
+          const sub = payload.data.dynamic.find(f => f.name === `stat_subtitle_${i}`);
+          embed.addFields({
+            name: `${STAT_KEY_LABELS[order[i]] ?? order[i]}`,
+            value: val ? `**${val.value}**\n${(sub?.value as string) ?? ''}` : '\u200b',
+            inline: true,
+          });
+        }
+      } catch { /* fall through */ }
+    }
+
+    return embed;
+  }
+
+  function buildStatOrderComponents(order: StatKey[], loading = false): ActionRowBuilder<any>[] {
+    const pick = loading ? StringSelectMenuBuilder.from(buildSlotPickSelect(order)).setDisabled(true) : buildSlotPickSelect(order);
+    const back = loading ? ButtonBuilder.from(backBtn).setDisabled(true) : backBtn;
+    const reset = loading ? ButtonBuilder.from(resetOrderBtn).setDisabled(true) : resetOrderBtn;
+    const suffix = loading ? ButtonBuilder.from(buildPeriodSuffixBtn(user.show_period_suffix ? true : false)).setDisabled(true) : buildPeriodSuffixBtn(user.show_period_suffix ? true : false);
+    const save = loading ? ButtonBuilder.from(saveBtn).setDisabled(true) : saveBtn;
+    return [
+      new ActionRowBuilder<any>().addComponents(pick),
+      new ActionRowBuilder<any>().addComponents(back, reset, suffix, save),
+    ];
   }
 
   const resetOrderBtn = new ButtonBuilder()
@@ -412,13 +453,6 @@ async function handleConfig(
       new StringSelectMenuOptionBuilder().setLabel('Top Album').setValue('top_album'),
       new StringSelectMenuOptionBuilder().setLabel('Top Artist').setValue('top_artist'),
     );
-
-  function buildStatOrderComponents(order: StatKey[]): ActionRowBuilder<any>[] {
-    return [
-      new ActionRowBuilder<any>().addComponents(buildSlotPickSelect(order)),
-      new ActionRowBuilder<any>().addComponents(backBtn, resetOrderBtn, buildPeriodSuffixBtn(user.show_period_suffix ? true : false)),
-    ];
-  }
 
   let selectedSlot: number | null = null;
   const mainEmbed = buildMainConfigEmbed(user);
@@ -475,6 +509,7 @@ async function handleConfig(
   let state: 'main' | 'primary_image' | 'secondary_image' | 'hide_username' | 'stat_order' = 'main';
   let selectedType: string | null = null;
   let selectedSecondaryType: string | null = null;
+  let pendingChanges = false;
 
   function getFreshUser(): void {
     const fresh = getUser(interaction.user.id);
@@ -534,15 +569,10 @@ async function handleConfig(
         } else if (value === 'stat_order') {
           state = 'stat_order';
           selectedSlot = null;
+          pendingChanges = false;
           const order: StatKey[] = JSON.parse(user.stat_order);
-          const orderList = order.map((k, i) => `Slot ${i + 1}: ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
           await i.update({
-            embeds: [
-              new EmbedBuilder()
-                .setColor(INFO)
-                .setTitle('Stat Order')
-                .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`),
-            ],
+            embeds: [buildStatOrderEmbed(order, user.cached_data)],
             components: buildStatOrderComponents(order),
           });
         }
@@ -551,14 +581,8 @@ async function handleConfig(
         if (state === 'stat_order' && selectedSlot !== null) {
           selectedSlot = null;
           const order: StatKey[] = JSON.parse(user.stat_order);
-          const orderList = order.map((k, j) => `Slot ${j + 1}: ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
           await i.update({
-            embeds: [
-              new EmbedBuilder()
-                .setColor(INFO)
-                .setTitle('Stat Order')
-                .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`),
-            ],
+            embeds: [buildStatOrderEmbed(order, user.cached_data)],
             components: buildStatOrderComponents(order),
           });
         } else if (state === 'primary_image' && selectedType) {
@@ -586,6 +610,16 @@ async function handleConfig(
             components: getSecondaryTypeComponents(),
           });
         } else {
+          if (pendingChanges) {
+            setStatOrder(interaction.user.id, JSON.parse(user.stat_order) as StatKey[]);
+            setShowPeriodSuffix(interaction.user.id, user.show_period_suffix ? true : false);
+            try {
+              await refreshUserWidget(user, lastfmService);
+              resetSchedulerTimer();
+            } catch {}
+            getFreshUser();
+            pendingChanges = false;
+          }
           state = 'main';
           getFreshUser();
           await i.update({
@@ -708,28 +742,11 @@ async function handleConfig(
         });
 
       } else if (i.customId === 'config_period_suffix') {
-        const show = user.show_period_suffix ? false : true;
-        await i.deferUpdate();
-
-        setShowPeriodSuffix(interaction.user.id, show);
-        user.show_period_suffix = show ? 1 : 0;
-
-        try {
-          await refreshUserWidget(user, lastfmService);
-          resetSchedulerTimer();
-        } catch (err) {
-          console.error(`[config] Refresh failed:`, err);
-        }
-
+        user.show_period_suffix = user.show_period_suffix ? 0 : 1;
+        pendingChanges = true;
         const order: StatKey[] = JSON.parse(user.stat_order);
-        const orderList = order.map((k, j) => `Slot ${j + 1}: ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
-        await interaction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(INFO)
-              .setTitle('Stat Order')
-              .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`),
-          ],
+        await i.update({
+          embeds: [buildStatOrderEmbed(order, user.cached_data)],
           components: buildStatOrderComponents(order),
         });
 
@@ -751,40 +768,33 @@ async function handleConfig(
         });
 
       } else if (i.customId === 'stat_assign' && i.isStringSelectMenu() && selectedSlot !== null) {
-        await i.deferUpdate();
         const newStat = i.values[0] as StatKey;
         const order: StatKey[] = JSON.parse(user.stat_order);
         order[selectedSlot] = newStat;
-        setStatOrder(interaction.user.id, order);
         user.stat_order = JSON.stringify(order);
-
-        try {
-          await refreshUserWidget(user, lastfmService);
-          resetSchedulerTimer();
-        } catch (err) {
-          console.error(`[config] Refresh failed:`, err);
-        }
-        getFreshUser();
+        pendingChanges = true;
 
         selectedSlot = null;
-        const updatedOrder: StatKey[] = JSON.parse(user.stat_order);
-        const orderList = updatedOrder.map((k, i) => `Slot ${i + 1}: ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
-        await interaction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(INFO)
-              .setTitle('Stat Order')
-              .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`),
-          ],
-          components: buildStatOrderComponents(updatedOrder),
+        await i.update({
+          embeds: [buildStatOrderEmbed(order, user.cached_data)],
+          components: buildStatOrderComponents(order),
         });
 
       } else if (i.customId === 'stat_order_reset') {
-        await i.deferUpdate();
-        selectedSlot = null;
         const defaultOrder = ['scrobbles', 'artists', 'loved_tracks', 'top_track', 'top_album', 'top_artist'] as StatKey[];
-        setStatOrder(interaction.user.id, defaultOrder);
         user.stat_order = JSON.stringify(defaultOrder);
+        pendingChanges = true;
+        await i.update({
+          embeds: [buildStatOrderEmbed(defaultOrder, user.cached_data)],
+          components: buildStatOrderComponents(defaultOrder),
+        });
+
+      } else if (i.customId === 'stat_order_save') {
+        await i.deferUpdate();
+        await interaction.editReply({ components: buildStatOrderComponents(JSON.parse(user.stat_order), true) });
+
+        setStatOrder(interaction.user.id, JSON.parse(user.stat_order) as StatKey[]);
+        setShowPeriodSuffix(interaction.user.id, user.show_period_suffix ? true : false);
 
         try {
           await refreshUserWidget(user, lastfmService);
@@ -793,17 +803,12 @@ async function handleConfig(
           console.error(`[config] Refresh failed:`, err);
         }
         getFreshUser();
+        pendingChanges = false;
 
-        const updatedOrder: StatKey[] = JSON.parse(user.stat_order);
-        const orderList = updatedOrder.map((k, i) => `Slot ${i + 1}: ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
+        const order: StatKey[] = JSON.parse(user.stat_order);
         await interaction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(INFO)
-              .setTitle('Stat Order')
-              .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`),
-          ],
-          components: buildStatOrderComponents(updatedOrder),
+          embeds: [buildStatOrderEmbed(order, user.cached_data)],
+          components: buildStatOrderComponents(order),
         });
 
       } else if (i.customId === 'primary_type' && i.isStringSelectMenu()) {
