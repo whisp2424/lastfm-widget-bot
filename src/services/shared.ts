@@ -195,18 +195,6 @@ export async function refreshUserWidget(
       name: 'scrobbling_since',
        value: `scrobbling since ${formatDate(info.registered.unixtime)}`,
     },
-    { type: 1, name: 'total_scrobbles', value: info.playcount.toLocaleString('en-US') },
-    { type: 1, name: 'total_artists', value: info.artistCount.toLocaleString('en-US') },
-    { type: 1, name: 'loved_tracks', value: lovedCount.toLocaleString('en-US') },
-    { type: 1, name: 'top_track', value: `${topTrack.artist} - ${topTrack.name}` },
-    { type: 1, name: 'top_track_7d', value: `${topTrack7.artist} - ${topTrack7.name}` },
-    { type: 1, name: 'top_track_30d', value: `${topTrack30.artist} - ${topTrack30.name}` },
-    { type: 1, name: 'top_artist', value: topArtist.name },
-    { type: 1, name: 'top_artist_7d', value: topArtist7.name },
-    { type: 1, name: 'top_artist_30d', value: topArtist30.name },
-    { type: 1, name: 'top_album', value: `${topAlbum.artist} - ${topAlbum.name}` },
-    { type: 1, name: 'top_album_7d', value: `${topAlbum7.artist} - ${topAlbum7.name}` },
-    { type: 1, name: 'top_album_30d', value: `${topAlbum30.artist} - ${topAlbum30.name}` },
   ];
 
   statOrder.forEach((key, i) => {
@@ -221,18 +209,6 @@ export async function refreshUserWidget(
   dynamic.push(
     { type: 3, name: 'primary_image', value: { url: primaryImage } },
     { type: 3, name: 'secondary_image', value: { url: secondaryImage } },
-    { type: 3, name: 'top_artist_picture', value: { url: artistImage } },
-    { type: 3, name: 'top_artist_picture_7d', value: { url: artistImage7 } },
-    { type: 3, name: 'top_artist_picture_30d', value: { url: artistImage30 } },
-    { type: 3, name: 'top_track_cover', value: { url: trackCover } },
-    { type: 3, name: 'top_track_cover_7d', value: { url: trackCover7 } },
-    { type: 3, name: 'top_track_cover_30d', value: { url: trackCover30 } },
-    { type: 3, name: 'top_album_cover', value: { url: albumCover } },
-    { type: 3, name: 'top_album_cover_7d', value: { url: albumCover7 } },
-    { type: 3, name: 'top_album_cover_30d', value: { url: albumCover30 } },
-    { type: 3, name: 'avatar', value: { url: avatarUrl } },
-    { type: 3, name: 'last_scrobble_cover', value: { url: recentCover } },
-    { type: 3, name: 'last_scrobble_artist_picture', value: { url: recentArtistImage } },
   );
 
   const dynamicWithFallback = dynamic.map((f) => fallbackField(f, cached));
@@ -248,6 +224,21 @@ export async function refreshUserWidget(
     advanceCycleIndex(user.discord_id);
   }
 
+  const cachedStats = {
+    total_scrobbles: info.playcount.toLocaleString('en-US'),
+    total_artists: info.artistCount.toLocaleString('en-US'),
+    loved_tracks: lovedCount.toLocaleString('en-US'),
+    top_track: `${topTrack.artist} - ${topTrack.name}`,
+    top_track_7d: `${topTrack7.artist} - ${topTrack7.name}`,
+    top_track_30d: `${topTrack30.artist} - ${topTrack30.name}`,
+    top_artist: topArtist.name,
+    top_artist_7d: topArtist7.name,
+    top_artist_30d: topArtist30.name,
+    top_album: `${topAlbum.artist} - ${topAlbum.name}`,
+    top_album_7d: `${topAlbum7.artist} - ${topAlbum7.name}`,
+    top_album_30d: `${topAlbum30.artist} - ${topAlbum30.name}`,
+  };
+
   const now = new Date().toISOString();
-  updateRefresh(user.discord_id, now, JSON.stringify(payload));
+  updateRefresh(user.discord_id, now, JSON.stringify(payload), JSON.stringify(cachedStats));
 }

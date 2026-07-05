@@ -24,6 +24,7 @@ export interface UserRow {
   access_token: string | null;
   last_refresh_at: string | null;
   cached_data: string | null;
+  cached_stats: string | null;
   primary_image_type: PrimaryImageType;
   primary_image_period: PrimaryImagePeriod;
   cycle_index: number;
@@ -32,6 +33,21 @@ export interface UserRow {
   show_period_suffix: number;
   secondary_image_type: SecondaryImageType;
   secondary_image_period: SecondaryImagePeriod;
+}
+
+export interface CachedStats {
+  total_scrobbles: string;
+  total_artists: string;
+  loved_tracks: string;
+  top_track: string;
+  top_track_7d: string;
+  top_track_30d: string;
+  top_artist: string;
+  top_artist_7d: string;
+  top_artist_30d: string;
+  top_album: string;
+  top_album_7d: string;
+  top_album_30d: string;
 }
 
 export interface DynamicField {

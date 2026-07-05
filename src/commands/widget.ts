@@ -1107,9 +1107,15 @@ async function handleImage(
   const payload: WidgetPayload = JSON.parse(user.cached_data);
   const dynamic = payload.data.dynamic;
 
-  const gf = (name: string) => getField(dynamic, name);
+  const cachedStats: Record<string, string> = user.cached_stats ? JSON.parse(user.cached_stats) : {};
+
+  const gf = (name: string) => {
+    const fromPayload = getField(dynamic, name);
+    if (fromPayload !== undefined) return fromPayload;
+    return cachedStats[name] as string | number | { url: string } | undefined;
+  };
   const gfs = (name: string, fallback = '—'): string => {
-    const v = getField(dynamic, name);
+    const v = gf(name);
     return v === undefined || typeof v === 'object' ? fallback : String(v);
   };
 

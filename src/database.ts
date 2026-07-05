@@ -77,6 +77,11 @@ function initSchema(): void {
   } catch {
     // column already exists
   }
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN cached_stats TEXT`);
+  } catch {
+    // column already exists
+  }
 }
 
 export function upsertUser(discordId: string, lastfmUsername: string): void {
@@ -111,11 +116,12 @@ export function updateRefresh(
   discordId: string,
   now: string,
   cachedData: string,
+  cachedStats: string,
 ): void {
   const stmt = getDb().prepare(`
-    UPDATE users SET last_refresh_at = ?, cached_data = ? WHERE discord_id = ?
+    UPDATE users SET last_refresh_at = ?, cached_data = ?, cached_stats = ? WHERE discord_id = ?
   `);
-  stmt.run(now, cachedData, discordId);
+  stmt.run(now, cachedData, cachedStats, discordId);
 }
 
 export function setPrimaryImageConfig(
