@@ -3,17 +3,20 @@ import { config } from './config.js';
 import { widgetCommand } from './commands/widget.js';
 import { LastFmService } from './services/lastfm.js';
 import { initScheduler, startScheduler } from './services/scheduler.js';
+import { NowPlayingMonitor } from './services/nowplaying.js';
 import { startWebServer } from './web/server.js';
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 export const lastfm = new LastFmService(config.lastfmApiKey);
+export const nowplaying = new NowPlayingMonitor(lastfm);
 
 client.once('ready', async () => {
   console.log(`[bot] Logged in as ${client.user?.tag}`);
 
   initScheduler(lastfm);
   startScheduler();
+  nowplaying.start();
   startWebServer();
 });
 
