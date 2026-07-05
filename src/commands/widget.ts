@@ -340,11 +340,6 @@ async function handleConfig(
         .setValue('stat_order')
         .setEmoji('🔀'),
       new StringSelectMenuOptionBuilder()
-        .setLabel('Period Suffix')
-        .setDescription('Toggle period labels in subtitles')
-        .setValue('period_suffix')
-        .setEmoji('📅'),
-      new StringSelectMenuOptionBuilder()
         .setLabel('Hide Username')
         .setDescription('Replace your username with "Last.fm" in the widget')
         .setValue('hide_username')
@@ -467,7 +462,7 @@ async function handleConfig(
 
   const reply = await interaction.editReply({ embeds: [mainEmbed], components: getMainComponents() });
 
-  let state: 'main' | 'primary_image' | 'secondary_image' | 'hide_username' | 'stat_order' | 'period_suffix' = 'main';
+  let state: 'main' | 'primary_image' | 'secondary_image' | 'hide_username' | 'stat_order' = 'main';
   let selectedType: string | null = null;
   let selectedSecondaryType: string | null = null;
 
@@ -536,26 +531,13 @@ async function handleConfig(
               new EmbedBuilder()
                 .setColor(INFO)
                 .setTitle('Stat Order')
-                .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`),
+                .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`)
+                .addFields({ name: 'Period Suffix', value: user.show_period_suffix ? 'Shown' : 'Hidden', inline: true }),
             ],
             components: [
               new ActionRowBuilder<any>().addComponents(buildSlotPickSelect(order)),
               new ActionRowBuilder<any>().addComponents(backBtn, resetOrderBtn),
-            ],
-          });
-        } else if (value === 'period_suffix') {
-          state = 'period_suffix';
-          await i.update({
-            embeds: [
-              new EmbedBuilder()
-                .setColor(INFO)
-                .setTitle('Period Suffix')
-                .setDescription('Choose whether to show period labels in stat subtitles.')
-                .addFields({ name: 'Current', value: user.show_period_suffix ? 'Shown' : 'Hidden', inline: true }),
-            ],
-            components: [
               new ActionRowBuilder<any>().addComponents(periodSuffixSelect),
-              new ActionRowBuilder<any>().addComponents(backBtn),
             ],
           });
         }
@@ -570,11 +552,13 @@ async function handleConfig(
               new EmbedBuilder()
                 .setColor(INFO)
                 .setTitle('Stat Order')
-                .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`),
+                .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`)
+                .addFields({ name: 'Period Suffix', value: user.show_period_suffix ? 'Shown' : 'Hidden', inline: true }),
             ],
             components: [
               new ActionRowBuilder<any>().addComponents(buildSlotPickSelect(order)),
               new ActionRowBuilder<any>().addComponents(backBtn, resetOrderBtn),
+              new ActionRowBuilder<any>().addComponents(periodSuffixSelect),
             ],
           });
         } else if (state === 'primary_image' && selectedType) {
@@ -726,20 +710,6 @@ async function handleConfig(
       } else if (i.customId === 'config_period_suffix' && i.isStringSelectMenu()) {
         const show = i.values[0] === 'show';
         await i.deferUpdate();
-        await interaction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(INFO)
-              .setTitle('Period Suffix')
-              .setDescription('Choose whether to show period labels in stat subtitles.'),
-          ],
-          components: [
-            new ActionRowBuilder<any>().addComponents(
-              StringSelectMenuBuilder.from(periodSuffixSelect).setDisabled(true),
-            ),
-            new ActionRowBuilder<any>().addComponents(ButtonBuilder.from(backBtn).setDisabled(true)),
-          ],
-        });
 
         setShowPeriodSuffix(interaction.user.id, show);
         user.show_period_suffix = show ? 1 : 0;
@@ -750,19 +720,21 @@ async function handleConfig(
         } catch (err) {
           console.error(`[config] Refresh failed:`, err);
         }
-        getFreshUser();
 
+        const order: StatKey[] = JSON.parse(user.stat_order);
+        const orderList = order.map((k, j) => `Slot ${j + 1}: ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
         await interaction.editReply({
           embeds: [
             new EmbedBuilder()
               .setColor(INFO)
-              .setTitle('Period Suffix')
-              .setDescription('Choose whether to show period labels in stat subtitles.')
-              .addFields({ name: 'Current', value: user.show_period_suffix ? 'Shown' : 'Hidden', inline: true }),
+              .setTitle('Stat Order')
+              .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`)
+              .addFields({ name: 'Period Suffix', value: user.show_period_suffix ? 'Shown' : 'Hidden', inline: true }),
           ],
           components: [
+            new ActionRowBuilder<any>().addComponents(buildSlotPickSelect(order)),
+            new ActionRowBuilder<any>().addComponents(backBtn, resetOrderBtn),
             new ActionRowBuilder<any>().addComponents(periodSuffixSelect),
-            new ActionRowBuilder<any>().addComponents(backBtn),
           ],
         });
 
@@ -807,11 +779,13 @@ async function handleConfig(
             new EmbedBuilder()
               .setColor(INFO)
               .setTitle('Stat Order')
-              .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`),
+              .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`)
+              .addFields({ name: 'Period Suffix', value: user.show_period_suffix ? 'Shown' : 'Hidden', inline: true }),
           ],
           components: [
             new ActionRowBuilder<any>().addComponents(buildSlotPickSelect(updatedOrder)),
             new ActionRowBuilder<any>().addComponents(backBtn, resetOrderBtn),
+            new ActionRowBuilder<any>().addComponents(periodSuffixSelect),
           ],
         });
 
@@ -837,11 +811,13 @@ async function handleConfig(
             new EmbedBuilder()
               .setColor(INFO)
               .setTitle('Stat Order')
-              .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`),
+              .setDescription(`Current assignments:\n${orderList}\n\nChoose a slot to change its stat.`)
+              .addFields({ name: 'Period Suffix', value: user.show_period_suffix ? 'Shown' : 'Hidden', inline: true }),
           ],
           components: [
             new ActionRowBuilder<any>().addComponents(buildSlotPickSelect(updatedOrder)),
             new ActionRowBuilder<any>().addComponents(backBtn, resetOrderBtn),
+            new ActionRowBuilder<any>().addComponents(periodSuffixSelect),
           ],
         });
 
