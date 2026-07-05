@@ -304,10 +304,13 @@ async function handleConfig(
     .setLabel('Back')
     .setStyle(ButtonStyle.Secondary);
 
-  const hideUsernameBtn = new ButtonBuilder()
-    .setCustomId('config_toggle_hide')
-    .setLabel('...')
-    .setStyle(ButtonStyle.Secondary);
+  const hideUsernameSelect = new StringSelectMenuBuilder()
+    .setCustomId('config_hide_username')
+    .setPlaceholder('Choose visibility...')
+    .addOptions(
+      new StringSelectMenuOptionBuilder().setLabel('Show Username').setDescription('Display your Last.fm username in the widget').setValue('show').setEmoji('👤'),
+      new StringSelectMenuOptionBuilder().setLabel('Hide Username').setDescription('Replace your username with "Last.fm"').setValue('hide').setEmoji('🔒'),
+    );
 
   const settingsSelect = new StringSelectMenuBuilder()
     .setCustomId('config_select')
@@ -417,14 +420,11 @@ async function handleConfig(
               new EmbedBuilder()
                 .setColor(INFO)
                 .setTitle('Hide Username')
-                .setDescription(`When enabled, your widget will show "Last.fm" instead of your username.`),
+                .setDescription('Choose whether your Last.fm username appears in the widget.')
+                .addFields({ name: 'Current', value: user.hide_username ? 'Hidden' : 'Visible', inline: true }),
             ],
             components: [
-              new ActionRowBuilder<any>().addComponents(
-                ButtonBuilder.from(hideUsernameBtn)
-                  .setLabel(user.hide_username ? 'On' : 'Off')
-                  .setStyle(user.hide_username ? ButtonStyle.Success : ButtonStyle.Danger),
-              ),
+              new ActionRowBuilder<any>().addComponents(hideUsernameSelect),
               new ActionRowBuilder<any>().addComponents(backBtn),
             ],
           });
@@ -508,26 +508,26 @@ async function handleConfig(
           });
         }
 
-      } else if (i.customId === 'config_toggle_hide' && i.isButton()) {
+      } else if (i.customId === 'config_hide_username' && i.isStringSelectMenu()) {
+        const hide = i.values[0] === 'hide';
         await i.deferUpdate();
         await interaction.editReply({
           embeds: [
             new EmbedBuilder()
               .setColor(INFO)
               .setTitle('Hide Username')
-              .setDescription(`When enabled, your widget will show "Last.fm" instead of your username.`),
+              .setDescription('Choose whether your Last.fm username appears in the widget.'),
           ],
           components: [
             new ActionRowBuilder<any>().addComponents(
-              ButtonBuilder.from(hideUsernameBtn).setDisabled(true),
+              StringSelectMenuBuilder.from(hideUsernameSelect).setDisabled(true),
             ),
             new ActionRowBuilder<any>().addComponents(ButtonBuilder.from(backBtn).setDisabled(true)),
           ],
         });
 
-        const newHide = !user.hide_username;
-        setHideUsername(interaction.user.id, newHide);
-        user.hide_username = newHide ? 1 : 0;
+        setHideUsername(interaction.user.id, hide);
+        user.hide_username = hide ? 1 : 0;
 
         try {
           await refreshUserWidget(user, lastfmService);
@@ -537,10 +537,18 @@ async function handleConfig(
         }
         getFreshUser();
 
-        state = 'main';
         await interaction.editReply({
-          embeds: [buildMainConfigEmbed(user)],
-          components: getMainComponents(),
+          embeds: [
+            new EmbedBuilder()
+              .setColor(INFO)
+              .setTitle('Hide Username')
+              .setDescription('Choose whether your Last.fm username appears in the widget.')
+              .addFields({ name: 'Current', value: user.hide_username ? 'Hidden' : 'Visible', inline: true }),
+          ],
+          components: [
+            new ActionRowBuilder<any>().addComponents(hideUsernameSelect),
+            new ActionRowBuilder<any>().addComponents(backBtn),
+          ],
         });
 
       } else if (i.customId === 'primary_type' && i.isStringSelectMenu()) {
@@ -559,10 +567,15 @@ async function handleConfig(
             console.error(`[config] Refresh failed:`, err);
           }
           getFreshUser();
-          state = 'main';
           await interaction.editReply({
-            embeds: [buildMainConfigEmbed(user)],
-            components: getMainComponents(),
+            embeds: [
+              new EmbedBuilder()
+                .setColor(INFO)
+                .setTitle('Primary Image')
+                .setDescription('Choose which image appears as the primary image on your Discord profile widget.')
+                .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) }),
+            ],
+            components: getTypeComponents(),
           });
         } else if (selectedType) {
           await i.update({
@@ -592,10 +605,15 @@ async function handleConfig(
           console.error(`[config] Refresh failed:`, err);
         }
         getFreshUser();
-        state = 'main';
         await interaction.editReply({
-          embeds: [buildMainConfigEmbed(user)],
-          components: getMainComponents(),
+          embeds: [
+            new EmbedBuilder()
+              .setColor(INFO)
+              .setTitle('Primary Image')
+              .setDescription(`Choose a time period for the **${formatConfig(selectedType)}** image.`)
+              .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) }),
+          ],
+          components: getPeriodComponents(),
         });
       }
     } catch (err) {
