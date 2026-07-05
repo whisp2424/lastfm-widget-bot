@@ -2,7 +2,8 @@ import { updateRefresh, advanceCycleIndex } from '../database.js';
 import { syncWidget } from './discord.js';
 import { isDefaultImage } from './lastfm.js';
 import type { LastFmService } from './lastfm.js';
-import type { UserRow, DynamicField, WidgetPayload } from '../types.js';
+import type { UserRow, DynamicField, WidgetPayload, StatKey } from '../types.js';
+import { DEFAULT_SUBTITLES } from '../types.js';
 
 const DEFAULT_IMAGE_URL = 'https://lastfm.freetls.fastly.net/i/u/500x500/2a96cbd8b46e442fc41c2b86b821562f.png';
 
@@ -23,6 +24,41 @@ export const CYCLE_PERIODS = ['overall', '30d', '7d'] as const;
 
 function safeFetch<T>(promise: Promise<T>, fallback: T): Promise<T> {
   return promise.catch(() => fallback);
+}
+
+function getPeriodLabel(period: string): string {
+  if (period === '7d') return 'last 7d';
+  if (period === '30d') return 'last 30d';
+  return 'overall';
+}
+
+function pickForPeriod<T>(overall: T, period7d: T, period30d: T, period: string): T {
+  if (period === '7d') return period7d;
+  if (period === '30d') return period30d;
+  return overall;
+}
+
+function getStatValue(key: StatKey, info: { playcount: number; artistCount: number }, lovedCount: number, currentPeriod: string, topTrack: { artist: string; name: string }, topTrack7: { artist: string; name: string }, topTrack30: { artist: string; name: string }, topArtist: { name: string }, topArtist7: { name: string }, topArtist30: { name: string }, topAlbum: { artist: string; name: string }, topAlbum7: { artist: string; name: string }, topAlbum30: { artist: string; name: string }): string {
+  switch (key) {
+    case 'scrobbles':
+      return info.playcount.toLocaleString('en-US');
+    case 'artists':
+      return info.artistCount.toLocaleString('en-US');
+    case 'loved_tracks':
+      return lovedCount.toLocaleString('en-US');
+    case 'top_track': {
+      const t = pickForPeriod(topTrack, topTrack7, topTrack30, currentPeriod);
+      return `${t.artist} - ${t.name}`;
+    }
+    case 'top_album': {
+      const a = pickForPeriod(topAlbum, topAlbum7, topAlbum30, currentPeriod);
+      return `${a.artist} - ${a.name}`;
+    }
+    case 'top_artist': {
+      const a = pickForPeriod(topArtist, topArtist7, topArtist30, currentPeriod);
+      return a.name;
+    }
+  }
 }
 
 function getCachedFields(user: UserRow): Map<string, DynamicField> {
@@ -79,6 +115,12 @@ export async function refreshUserWidget(
     safeFetch(lastfmService.getRecentTrack(username), fallbackRecent),
     safeFetch(lastfmService.getLovedTrackCount(username), 0),
   ]);
+
+  const shouldCycle = user.primary_image_period === 'cycle' || user.secondary_image_period === 'cycle';
+  const currentPeriod = shouldCycle ? CYCLE_PERIODS[user.cycle_index] : 'overall';
+
+  const statOrder: StatKey[] = JSON.parse(user.stat_order);
+  const showSuffix = user.show_period_suffix === 1;
 
   const avatarUrl = orDefault(
     info.image?.find((i) => i.size === 'extralarge')?.['#text']?.replace('/300x300/', '/500x500/'),
@@ -137,6 +179,16 @@ export async function refreshUserWidget(
     return imageSources[`${user.primary_image_type}_${period}`] ?? DEFAULT_IMAGE_URL;
   })();
 
+  const secondaryImage = (() => {
+    if (user.secondary_image_type === 'avatar' || user.secondary_image_type === 'last_scrobble' || user.secondary_image_type === 'last_scrobble_artist') {
+      return imageSources[user.secondary_image_type];
+    }
+    const period = user.secondary_image_period === 'cycle'
+      ? CYCLE_PERIODS[user.cycle_index]
+      : user.secondary_image_period;
+    return imageSources[`${user.secondary_image_type}_${period}`] ?? DEFAULT_IMAGE_URL;
+  })();
+
   const dynamic: DynamicField[] = [
     {
       type: 1,
@@ -157,8 +209,18 @@ export async function refreshUserWidget(
     { type: 1, name: 'top_album_30d', value: `${topAlbum30.artist} - ${topAlbum30.name}` },
   ];
 
+  statOrder.forEach((key, i) => {
+    const baseSubtitle = DEFAULT_SUBTITLES[key] ?? '';
+    const subtitle = showSuffix ? `${baseSubtitle} (${getPeriodLabel(currentPeriod)})` : baseSubtitle;
+    dynamic.push(
+      { type: 1, name: `stat_subtitle_${i}`, value: subtitle },
+      { type: 1, name: `stat_value_${i}`, value: getStatValue(key, info, lovedCount, currentPeriod, topTrack, topTrack7, topTrack30, topArtist, topArtist7, topArtist30, topAlbum, topAlbum7, topAlbum30) },
+    );
+  });
+
   dynamic.push(
     { type: 3, name: 'primary_image', value: { url: primaryImage } },
+    { type: 3, name: 'secondary_image', value: { url: secondaryImage } },
     { type: 3, name: 'top_artist_picture', value: { url: artistImage } },
     { type: 3, name: 'top_artist_picture_7d', value: { url: artistImage7 } },
     { type: 3, name: 'top_artist_picture_30d', value: { url: artistImage30 } },
@@ -182,7 +244,7 @@ export async function refreshUserWidget(
 
   await syncWidget(user.discord_id, payload);
 
-  if (user.primary_image_period === 'cycle') {
+  if (shouldCycle) {
     advanceCycleIndex(user.discord_id);
   }
 

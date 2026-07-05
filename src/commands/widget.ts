@@ -12,12 +12,12 @@ import {
   type ChatInputCommandInteraction,
 } from 'discord.js';
 import { config } from '../config.js';
-import { getUser, upsertUser, setPrimaryImageConfig, deauthorizeUser, setHideUsername } from '../database.js';
+import { getUser, upsertUser, setPrimaryImageConfig, setSecondaryImageConfig, setHideUsername, setShowPeriodSuffix, setStatOrder, deauthorizeUser } from '../database.js';
 import { refreshUserWidget, CYCLE_PERIODS } from '../services/shared.js';
 import { getNextRefreshIn, resetSchedulerTimer } from '../services/scheduler.js';
 import { waitForOAuth } from '../oauth-store.js';
 import type { LastFmService } from '../services/lastfm.js';
-import type { PrimaryImagePeriod, PrimaryImageType, WidgetPayload, UserRow } from '../types.js';
+import type { PrimaryImagePeriod, SecondaryImageType, SecondaryImagePeriod, WidgetPayload, UserRow, StatKey } from '../types.js';
 
 const SUCCESS = 0xa6e3a1;
 const ERROR = 0xba0000;
@@ -274,6 +274,15 @@ function buildMainConfigEmbed(user: UserRow): EmbedBuilder {
   return embed;
 }
 
+const STAT_KEY_LABELS: Record<string, string> = {
+  scrobbles: 'Scrobbles',
+  artists: 'Artists',
+  loved_tracks: 'Loved Tracks',
+  top_track: 'Top Track',
+  top_album: 'Top Album',
+  top_artist: 'Top Artist',
+};
+
 async function handleConfig(
   interaction: ChatInputCommandInteraction,
   lastfmService: LastFmService,
@@ -322,6 +331,21 @@ async function handleConfig(
         .setValue('primary_image')
         .setEmoji('🖼️'),
       new StringSelectMenuOptionBuilder()
+        .setLabel('Secondary Image')
+        .setDescription('Choose a secondary image for your widget')
+        .setValue('secondary_image')
+        .setEmoji('🖼️'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Stat Order')
+        .setDescription('Reorder which stats appear in your widget')
+        .setValue('stat_order')
+        .setEmoji('🔀'),
+      new StringSelectMenuOptionBuilder()
+        .setLabel('Period Suffix')
+        .setDescription('Toggle period labels in subtitles')
+        .setValue('period_suffix')
+        .setEmoji('📅'),
+      new StringSelectMenuOptionBuilder()
         .setLabel('Hide Username')
         .setDescription('Replace your username with "Last.fm" in the widget')
         .setValue('hide_username')
@@ -349,6 +373,32 @@ async function handleConfig(
       new StringSelectMenuOptionBuilder().setLabel('Last 30 Days').setDescription('Top track/album from the past month').setValue('30d').setEmoji('📆'),
       new StringSelectMenuOptionBuilder().setLabel('Cycle').setDescription('Cycle through periods on each refresh').setValue('cycle').setEmoji('🔄'),
     );
+
+  const secondaryTypeSelect = StringSelectMenuBuilder.from(typeSelect).setCustomId('secondary_type');
+  const secondaryPeriodSelect = StringSelectMenuBuilder.from(periodSelect).setCustomId('secondary_period');
+
+  const periodSuffixSelect = new StringSelectMenuBuilder()
+    .setCustomId('config_period_suffix')
+    .setPlaceholder('Choose visibility...')
+    .addOptions(
+      new StringSelectMenuOptionBuilder().setLabel('Show').setDescription('Show period labels in subtitles (e.g. "Scrobbles (overall)")').setValue('show').setEmoji('👁️'),
+      new StringSelectMenuOptionBuilder().setLabel('Hide').setDescription('Hide period labels in subtitles (e.g. "Scrobbles")').setValue('hide').setEmoji('🙈'),
+    );
+
+  const moveUpBtn = new ButtonBuilder()
+    .setCustomId('stat_order_up')
+    .setLabel('▲ Rotate Up')
+    .setStyle(ButtonStyle.Secondary);
+
+  const moveDownBtn = new ButtonBuilder()
+    .setCustomId('stat_order_down')
+    .setLabel('▼ Rotate Down')
+    .setStyle(ButtonStyle.Secondary);
+
+  const resetOrderBtn = new ButtonBuilder()
+    .setCustomId('stat_order_reset')
+    .setLabel('Reset')
+    .setStyle(ButtonStyle.Danger);
 
   const mainEmbed = buildMainConfigEmbed(user);
   let refreshUsed = false;
@@ -381,10 +431,29 @@ async function handleConfig(
     ];
   }
 
+  function getSecondaryTypeComponents(loading = false): ActionRowBuilder<any>[] {
+    const select = loading ? StringSelectMenuBuilder.from(secondaryTypeSelect).setDisabled(true) : secondaryTypeSelect;
+    const back = loading ? ButtonBuilder.from(backBtn).setDisabled(true) : backBtn;
+    return [
+      new ActionRowBuilder<any>().addComponents(select),
+      new ActionRowBuilder<any>().addComponents(back),
+    ];
+  }
+
+  function getSecondaryPeriodComponents(loading = false): ActionRowBuilder<any>[] {
+    const select = loading ? StringSelectMenuBuilder.from(secondaryPeriodSelect).setDisabled(true) : secondaryPeriodSelect;
+    const back = loading ? ButtonBuilder.from(backBtn).setDisabled(true) : backBtn;
+    return [
+      new ActionRowBuilder<any>().addComponents(select),
+      new ActionRowBuilder<any>().addComponents(back),
+    ];
+  }
+
   const reply = await interaction.editReply({ embeds: [mainEmbed], components: getMainComponents() });
 
-  let state: 'main' | 'primary_image' | 'hide_username' = 'main';
+  let state: 'main' | 'primary_image' | 'secondary_image' | 'hide_username' | 'stat_order' | 'period_suffix' = 'main';
   let selectedType: string | null = null;
+  let selectedSecondaryType: string | null = null;
 
   function getFreshUser(): void {
     const fresh = getUser(interaction.user.id);
@@ -425,6 +494,50 @@ async function handleConfig(
             ],
             components: [
               new ActionRowBuilder<any>().addComponents(hideUsernameSelect),
+              new ActionRowBuilder<any>().addComponents(backBtn),
+            ],
+          });
+        } else if (value === 'secondary_image') {
+          state = 'secondary_image';
+          selectedSecondaryType = null;
+          await i.update({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(INFO)
+                .setTitle('Secondary Image')
+                .setDescription('Choose which image appears as the secondary image on your Discord profile widget.')
+                .addFields({ name: 'Current', value: formatConfig(user.secondary_image_type, user.secondary_image_period) }),
+            ],
+            components: getSecondaryTypeComponents(),
+          });
+        } else if (value === 'stat_order') {
+          state = 'stat_order';
+          const order: StatKey[] = JSON.parse(user.stat_order);
+          const orderList = order.map((k, i) => `${i + 1}. ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
+          await i.update({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(INFO)
+                .setTitle('Stat Order')
+                .setDescription(`Current stat order:\n${orderList}\n\nUse the buttons to reorder. Select a stat first.`),
+            ],
+            components: [
+              new ActionRowBuilder<any>().addComponents(moveUpBtn, moveDownBtn, resetOrderBtn),
+              new ActionRowBuilder<any>().addComponents(backBtn),
+            ],
+          });
+        } else if (value === 'period_suffix') {
+          state = 'period_suffix';
+          await i.update({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(INFO)
+                .setTitle('Period Suffix')
+                .setDescription('Choose whether to show period labels in stat subtitles.')
+                .addFields({ name: 'Current', value: user.show_period_suffix ? 'Shown' : 'Hidden', inline: true }),
+            ],
+            components: [
+              new ActionRowBuilder<any>().addComponents(periodSuffixSelect),
               new ActionRowBuilder<any>().addComponents(backBtn),
             ],
           });
@@ -551,6 +664,137 @@ async function handleConfig(
           ],
         });
 
+      } else if (i.customId === 'config_period_suffix' && i.isStringSelectMenu()) {
+        const show = i.values[0] === 'show';
+        await i.deferUpdate();
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(INFO)
+              .setTitle('Period Suffix')
+              .setDescription('Choose whether to show period labels in stat subtitles.'),
+          ],
+          components: [
+            new ActionRowBuilder<any>().addComponents(
+              StringSelectMenuBuilder.from(periodSuffixSelect).setDisabled(true),
+            ),
+            new ActionRowBuilder<any>().addComponents(ButtonBuilder.from(backBtn).setDisabled(true)),
+          ],
+        });
+
+        setShowPeriodSuffix(interaction.user.id, show);
+        user.show_period_suffix = show ? 1 : 0;
+
+        try {
+          await refreshUserWidget(user, lastfmService);
+          resetSchedulerTimer();
+        } catch (err) {
+          console.error(`[config] Refresh failed:`, err);
+        }
+        getFreshUser();
+
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(INFO)
+              .setTitle('Period Suffix')
+              .setDescription('Choose whether to show period labels in stat subtitles.')
+              .addFields({ name: 'Current', value: user.show_period_suffix ? 'Shown' : 'Hidden', inline: true }),
+          ],
+          components: [
+            new ActionRowBuilder<any>().addComponents(periodSuffixSelect),
+            new ActionRowBuilder<any>().addComponents(backBtn),
+          ],
+        });
+
+      } else if (i.customId === 'stat_order_up') {
+        await i.deferUpdate();
+        const order: StatKey[] = JSON.parse(user.stat_order);
+        if (order.length < 2) return;
+        const first = order.shift()!;
+        order.push(first);
+        setStatOrder(interaction.user.id, order);
+        user.stat_order = JSON.stringify(order);
+
+        const orderList = order.map((k, j) => `${j + 1}. ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(INFO)
+              .setTitle('Stat Order')
+              .setDescription(`Current stat order:\n${orderList}\n\nUse the buttons to reorder.`),
+          ],
+          components: [
+            new ActionRowBuilder<any>().addComponents(moveUpBtn, moveDownBtn, resetOrderBtn),
+            new ActionRowBuilder<any>().addComponents(backBtn),
+          ],
+        });
+
+        try {
+          await refreshUserWidget(user, lastfmService);
+          resetSchedulerTimer();
+        } catch (err) {
+          console.error(`[config] Refresh failed:`, err);
+        }
+
+      } else if (i.customId === 'stat_order_down') {
+        await i.deferUpdate();
+        const order: StatKey[] = JSON.parse(user.stat_order);
+        if (order.length < 2) return;
+        const last = order.pop()!;
+        order.unshift(last);
+        setStatOrder(interaction.user.id, order);
+        user.stat_order = JSON.stringify(order);
+
+        const orderList = order.map((k, j) => `${j + 1}. ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(INFO)
+              .setTitle('Stat Order')
+              .setDescription(`Current stat order:\n${orderList}\n\nUse the buttons to reorder.`),
+          ],
+          components: [
+            new ActionRowBuilder<any>().addComponents(moveUpBtn, moveDownBtn, resetOrderBtn),
+            new ActionRowBuilder<any>().addComponents(backBtn),
+          ],
+        });
+
+        try {
+          await refreshUserWidget(user, lastfmService);
+          resetSchedulerTimer();
+        } catch (err) {
+          console.error(`[config] Refresh failed:`, err);
+        }
+
+      } else if (i.customId === 'stat_order_reset') {
+        await i.deferUpdate();
+        const defaultOrder = ['scrobbles', 'artists', 'loved_tracks', 'top_track', 'top_album', 'top_artist'] as StatKey[];
+        setStatOrder(interaction.user.id, defaultOrder);
+        user.stat_order = JSON.stringify(defaultOrder);
+
+        getFreshUser();
+        const orderList = defaultOrder.map((k, j) => `${j + 1}. ${STAT_KEY_LABELS[k] ?? k}`).join('\n');
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(INFO)
+              .setTitle('Stat Order')
+              .setDescription(`Current stat order:\n${orderList}\n\nUse the buttons to reorder. Select a stat first.`),
+          ],
+          components: [
+            new ActionRowBuilder<any>().addComponents(moveUpBtn, moveDownBtn, resetOrderBtn),
+            new ActionRowBuilder<any>().addComponents(backBtn),
+          ],
+        });
+
+        try {
+          await refreshUserWidget(user, lastfmService);
+          resetSchedulerTimer();
+        } catch (err) {
+          console.error(`[config] Refresh failed:`, err);
+        }
+
       } else if (i.customId === 'primary_type' && i.isStringSelectMenu()) {
         selectedType = i.values[0];
         if (selectedType === 'avatar' || selectedType === 'last_scrobble' || selectedType === 'last_scrobble_artist') {
@@ -614,6 +858,70 @@ async function handleConfig(
               .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) }),
           ],
           components: getPeriodComponents(),
+        });
+      } else if (i.customId === 'secondary_type' && i.isStringSelectMenu()) {
+        selectedSecondaryType = i.values[0];
+        if (selectedSecondaryType === 'avatar' || selectedSecondaryType === 'last_scrobble' || selectedSecondaryType === 'last_scrobble_artist') {
+          await i.deferUpdate();
+          await interaction.editReply({ components: getSecondaryTypeComponents(true) });
+
+          setSecondaryImageConfig(interaction.user.id, selectedSecondaryType as 'avatar' | 'last_scrobble' | 'last_scrobble_artist', 'overall');
+          user.secondary_image_type = selectedSecondaryType as 'avatar' | 'last_scrobble' | 'last_scrobble_artist';
+          user.secondary_image_period = 'overall';
+          try {
+            await refreshUserWidget(user, lastfmService);
+            resetSchedulerTimer();
+          } catch (err) {
+            console.error(`[config] Refresh failed:`, err);
+          }
+          getFreshUser();
+          await interaction.editReply({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(INFO)
+                .setTitle('Secondary Image')
+                .setDescription('Choose which image appears as the secondary image on your Discord profile widget.')
+                .addFields({ name: 'Current', value: formatConfig(user.secondary_image_type, user.secondary_image_period) }),
+            ],
+            components: getSecondaryTypeComponents(),
+          });
+        } else if (selectedSecondaryType) {
+          await i.update({
+            embeds: [
+              new EmbedBuilder()
+                .setColor(INFO)
+                .setTitle('Secondary Image')
+                .setDescription(`Choose a time period for the **${formatConfig(selectedSecondaryType)}** image.`)
+                .addFields({ name: 'Current', value: formatConfig(user.secondary_image_type, user.secondary_image_period) }),
+            ],
+            components: getSecondaryPeriodComponents(),
+          });
+        }
+
+      } else if (i.customId === 'secondary_period' && selectedSecondaryType && i.isStringSelectMenu()) {
+        await i.deferUpdate();
+        await interaction.editReply({ components: getSecondaryPeriodComponents(true) });
+
+        const period = i.values[0] as SecondaryImagePeriod;
+        setSecondaryImageConfig(interaction.user.id, selectedSecondaryType as 'artist' | 'track' | 'album', period);
+        user.secondary_image_type = selectedSecondaryType as 'artist' | 'track' | 'album';
+        user.secondary_image_period = period;
+        try {
+          await refreshUserWidget(user, lastfmService);
+          resetSchedulerTimer();
+        } catch (err) {
+          console.error(`[config] Refresh failed:`, err);
+        }
+        getFreshUser();
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(INFO)
+              .setTitle('Secondary Image')
+              .setDescription(`Choose a time period for the **${formatConfig(selectedSecondaryType)}** image.`)
+              .addFields({ name: 'Current', value: formatConfig(user.secondary_image_type, user.secondary_image_period) }),
+          ],
+          components: getSecondaryPeriodComponents(),
         });
       }
     } catch (err) {

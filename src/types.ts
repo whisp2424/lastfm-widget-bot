@@ -1,6 +1,22 @@
 export type PrimaryImageType = 'avatar' | 'artist' | 'track' | 'album' | 'last_scrobble' | 'last_scrobble_artist';
 export type PrimaryImagePeriod = 'overall' | '7d' | '30d' | 'cycle';
 
+export type SecondaryImageType = PrimaryImageType;
+export type SecondaryImagePeriod = PrimaryImagePeriod;
+
+export type StatKey = 'scrobbles' | 'artists' | 'loved_tracks' | 'top_track' | 'top_album' | 'top_artist';
+
+export const DEFAULT_STAT_ORDER: StatKey[] = ['scrobbles', 'artists', 'loved_tracks', 'top_track', 'top_album', 'top_artist'];
+
+export const DEFAULT_SUBTITLES: Record<StatKey, string> = {
+  scrobbles: 'Scrobbles',
+  artists: 'Artists',
+  loved_tracks: 'Loved Tracks',
+  top_track: 'Top Track',
+  top_album: 'Top Album',
+  top_artist: 'Top Artist',
+};
+
 export interface UserRow {
   discord_id: string;
   lastfm_username: string;
@@ -12,6 +28,10 @@ export interface UserRow {
   primary_image_period: PrimaryImagePeriod;
   cycle_index: number;
   hide_username: number;
+  stat_order: string;
+  show_period_suffix: number;
+  secondary_image_type: SecondaryImageType;
+  secondary_image_period: SecondaryImagePeriod;
 }
 
 export interface DynamicField {

@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import path from 'node:path';
-import type { UserRow, PrimaryImageType, PrimaryImagePeriod } from './types.js';
+import type { UserRow, PrimaryImageType, PrimaryImagePeriod, SecondaryImageType, SecondaryImagePeriod, StatKey } from './types.js';
 
 const DB_PATH = path.join(process.cwd(), 'widget.db');
 
@@ -54,6 +54,26 @@ function initSchema(): void {
   }
   try {
     db.exec(`ALTER TABLE users ADD COLUMN hide_username INTEGER NOT NULL DEFAULT 0`);
+  } catch {
+    // column already exists
+  }
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN stat_order TEXT NOT NULL DEFAULT '["scrobbles","artists","loved_tracks","top_track","top_album","top_artist"]'`);
+  } catch {
+    // column already exists
+  }
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN show_period_suffix INTEGER NOT NULL DEFAULT 1`);
+  } catch {
+    // column already exists
+  }
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN secondary_image_type TEXT NOT NULL DEFAULT 'avatar'`);
+  } catch {
+    // column already exists
+  }
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN secondary_image_period TEXT NOT NULL DEFAULT 'overall'`);
   } catch {
     // column already exists
   }
@@ -113,6 +133,28 @@ export function setHideUsername(discordId: string, hide: boolean): void {
   getDb().prepare(`
     UPDATE users SET hide_username = ? WHERE discord_id = ?
   `).run(hide ? 1 : 0, discordId);
+}
+
+export function setStatOrder(discordId: string, order: StatKey[]): void {
+  getDb().prepare(`
+    UPDATE users SET stat_order = ? WHERE discord_id = ?
+  `).run(JSON.stringify(order), discordId);
+}
+
+export function setShowPeriodSuffix(discordId: string, show: boolean): void {
+  getDb().prepare(`
+    UPDATE users SET show_period_suffix = ? WHERE discord_id = ?
+  `).run(show ? 1 : 0, discordId);
+}
+
+export function setSecondaryImageConfig(
+  discordId: string,
+  type: SecondaryImageType,
+  period: SecondaryImagePeriod,
+): void {
+  getDb().prepare(`
+    UPDATE users SET secondary_image_type = ?, secondary_image_period = ?, cycle_index = 0 WHERE discord_id = ?
+  `).run(type, period, discordId);
 }
 
 export function advanceCycleIndex(discordId: string): void {
