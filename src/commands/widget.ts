@@ -407,13 +407,13 @@ async function handleConfig(
   function buildToggleSuffixBtn(show: boolean): ButtonBuilder {
     return ButtonBuilder.from(toggleSuffixBtn)
       .setLabel(show ? 'Hide period suffix' : 'Show period suffix')
-      .setStyle(show ? ButtonStyle.Primary : ButtonStyle.Secondary);
+      .setStyle(ButtonStyle.Secondary);
   }
 
   const switchStatBtn = new ButtonBuilder()
     .setCustomId('slot_switch_stat')
     .setLabel('Switch stats')
-    .setStyle(ButtonStyle.Secondary);
+    .setStyle(ButtonStyle.Primary);
 
   const saveSlotBtn = new ButtonBuilder()
     .setCustomId('slot_save_slot')
@@ -522,7 +522,7 @@ async function handleConfig(
       ],
       components: [
         new ActionRowBuilder<any>().addComponents(changePeriodBtn, buildToggleSuffixBtn(showSuffix)),
-        new ActionRowBuilder<any>().addComponents(switchStatBtn, saveSlotBtn, cancelSlotBtn),
+        new ActionRowBuilder<any>().addComponents(saveSlotBtn, switchStatBtn, cancelSlotBtn),
       ],
     });
   }
