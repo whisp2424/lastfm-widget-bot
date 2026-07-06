@@ -529,13 +529,15 @@ async function handleConfig(
     const statName = STAT_KEY_LABELS[slot.key] ?? slot.key;
     const subtitle = showSuffix ? `${statName} (${resolvedLabel})` : statName;
 
+    const statLabel = (STAT_KEY_LABELS[slot.key] ?? slot.key).toLowerCase();
+
     let periodText: string;
     if (slot.period === 'overall') {
-      periodText = `Currently showing overall ${slot.key}`;
+      periodText = `Currently showing overall ${statLabel}`;
     } else if (slot.period === 'cycle') {
-      periodText = `Currently using cycle period, showing ${slot.key} for the ${resolvedLabel}`;
+      periodText = `Currently using cycle period, showing ${statLabel} for the ${resolvedLabel}`;
     } else {
-      periodText = `Currently showing ${slot.key} for the ${resolvedLabel}`;
+      periodText = `Currently showing ${statLabel} for the ${resolvedLabel}`;
     }
 
     let statValue = '\u200b';
@@ -553,7 +555,7 @@ async function handleConfig(
           .setColor(INFO)
           .setTitle(`Editing Slot #${selectedSlot + 1}`)
           .addFields({ name: statValue, value: subtitle, inline: false })
-          .setFooter({ text: `${periodText}, period will be ${showSuffix ? 'shown' : 'hidden'} for this slot.` }),
+          .setFooter({ text: periodText }),
       ],
       components: [
         new ActionRowBuilder<any>().addComponents(changePeriodBtn, buildToggleSuffixBtn(showSuffix)),
