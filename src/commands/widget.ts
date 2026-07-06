@@ -656,6 +656,16 @@ async function handleConfig(
     return null;
   }
 
+  function buildDisabledSelect(select: StringSelectMenuBuilder, chosen: string, placeholder: string): StringSelectMenuBuilder {
+    const raw = select.toJSON();
+    const options = (raw.options ?? []).map(o => ({ ...o, default: o.value === chosen }));
+    return new StringSelectMenuBuilder()
+      .setCustomId(raw.custom_id)
+      .setDisabled(true)
+      .setPlaceholder(placeholder)
+      .setOptions(options as any);
+  }
+
   const reply = await interaction.editReply({ embeds: [mainEmbed], components: getMainComponents() });
 
   let state: 'main' | 'primary_image' | 'secondary_image' | 'hide_username' | 'stat_order' = 'main';
@@ -680,16 +690,14 @@ async function handleConfig(
         if (value === 'primary_image') {
           state = 'primary_image';
           selectedType = null;
-          await i.update({
-            embeds: [
-              new EmbedBuilder()
-                .setColor(INFO)
-                .setTitle('Primary Image')
-                .setDescription('Choose which image appears as the primary image on your Discord profile widget.')
-                .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) }),
-            ],
-            components: getTypeComponents(),
-          });
+          const imgUrl = getImageUrl('primary_image');
+          const embed = new EmbedBuilder()
+            .setColor(INFO)
+            .setTitle('Primary Image')
+            .setDescription('Choose which image appears as the primary image on your Discord profile widget.')
+            .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) });
+          if (imgUrl) embed.setThumbnail(imgUrl);
+          await i.update({ embeds: [embed], components: getTypeComponents() });
         } else if (value === 'hide_username') {
           state = 'hide_username';
           await i.update({
@@ -708,16 +716,14 @@ async function handleConfig(
         } else if (value === 'secondary_image') {
           state = 'secondary_image';
           selectedSecondaryType = null;
-          await i.update({
-            embeds: [
-              new EmbedBuilder()
-                .setColor(INFO)
-                .setTitle('Secondary Image')
-                .setDescription('Choose which image appears as the secondary image on your Discord profile widget.')
-                .addFields({ name: 'Current', value: formatConfig(user.secondary_image_type, user.secondary_image_period) }),
-            ],
-            components: getSecondaryTypeComponents(),
-          });
+          const imgUrl = getImageUrl('secondary_image');
+          const embed = new EmbedBuilder()
+            .setColor(INFO)
+            .setTitle('Secondary Image')
+            .setDescription('Choose which image appears as the secondary image on your Discord profile widget.')
+            .addFields({ name: 'Current', value: formatConfig(user.secondary_image_type, user.secondary_image_period) });
+          if (imgUrl) embed.setThumbnail(imgUrl);
+          await i.update({ embeds: [embed], components: getSecondaryTypeComponents() });
         } else if (value === 'stat_order') {
           state = 'stat_order';
           selectedSlot = null;
@@ -741,28 +747,24 @@ async function handleConfig(
           });
         } else if (state === 'primary_image' && selectedType) {
           selectedType = null;
-          await i.update({
-            embeds: [
-              new EmbedBuilder()
-                .setColor(INFO)
-                .setTitle('Primary Image')
-                .setDescription('Choose which image appears as the primary image on your Discord profile widget.')
-                .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) }),
-            ],
-            components: getTypeComponents(),
-          });
+          const imgUrl = getImageUrl('primary_image');
+          const embed = new EmbedBuilder()
+            .setColor(INFO)
+            .setTitle('Primary Image')
+            .setDescription('Choose which image appears as the primary image on your Discord profile widget.')
+            .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) });
+          if (imgUrl) embed.setThumbnail(imgUrl);
+          await i.update({ embeds: [embed], components: getTypeComponents() });
         } else if (state === 'secondary_image' && selectedSecondaryType) {
           selectedSecondaryType = null;
-          await i.update({
-            embeds: [
-              new EmbedBuilder()
-                .setColor(INFO)
-                .setTitle('Secondary Image')
-                .setDescription('Choose which image appears as the secondary image on your Discord profile widget.')
-                .addFields({ name: 'Current', value: formatConfig(user.secondary_image_type, user.secondary_image_period) }),
-            ],
-            components: getSecondaryTypeComponents(),
-          });
+          const imgUrl = getImageUrl('secondary_image');
+          const embed = new EmbedBuilder()
+            .setColor(INFO)
+            .setTitle('Secondary Image')
+            .setDescription('Choose which image appears as the secondary image on your Discord profile widget.')
+            .addFields({ name: 'Current', value: formatConfig(user.secondary_image_type, user.secondary_image_period) });
+          if (imgUrl) embed.setThumbnail(imgUrl);
+          await i.update({ embeds: [embed], components: getSecondaryTypeComponents() });
         } else {
           if (pendingChanges) {
             setStatOrder(interaction.user.id, parseSlots());
@@ -855,15 +857,9 @@ async function handleConfig(
         const hide = i.values[0] === 'hide';
         await i.deferUpdate();
         await interaction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(INFO)
-              .setTitle('Hide Username')
-              .setDescription(`Chosen: **${hide ? 'Hide Username' : 'Show Username'}**`),
-          ],
           components: [
             new ActionRowBuilder<any>().addComponents(
-              StringSelectMenuBuilder.from(hideUsernameSelect).setDisabled(true).setPlaceholder(hide ? 'Hide Username' : 'Show Username'),
+              buildDisabledSelect(hideUsernameSelect, hide ? 'hide' : 'show', hide ? 'Hide Username' : 'Show Username'),
             ),
             new ActionRowBuilder<any>().addComponents(ButtonBuilder.from(backBtn).setDisabled(true)),
           ],
@@ -980,15 +976,11 @@ async function handleConfig(
         if (selectedType === 'avatar' || selectedType === 'last_scrobble' || selectedType === 'last_scrobble_artist') {
           await i.deferUpdate();
 
-          const imgUrl = getImageUrl('primary_image');
-          const placeholderEmbed = new EmbedBuilder().setColor(INFO).setTitle('Primary Image')
-            .setDescription(`Chosen: **${formatConfig(selectedType)}**`);
-          if (imgUrl) placeholderEmbed.setThumbnail(imgUrl);
-
           await interaction.editReply({
-            embeds: [placeholderEmbed],
             components: [
-              new ActionRowBuilder<any>().addComponents(StringSelectMenuBuilder.from(typeSelect).setDisabled(true).setPlaceholder(formatConfig(selectedType))),
+              new ActionRowBuilder<any>().addComponents(
+                buildDisabledSelect(typeSelect, selectedType, formatConfig(selectedType)),
+              ),
               new ActionRowBuilder<any>().addComponents(ButtonBuilder.from(backBtn).setDisabled(true)),
             ],
           });
@@ -1008,30 +1000,25 @@ async function handleConfig(
             components: getMainComponents(),
           });
         } else if (selectedType) {
-          await i.update({
-            embeds: [
-              new EmbedBuilder()
-                .setColor(INFO)
-                .setTitle('Primary Image')
-                .setDescription(`Choose a time period for the **${formatConfig(selectedType)}** image.`)
-                .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) }),
-            ],
-            components: getPeriodComponents(),
-          });
+          const imgUrl = getImageUrl('primary_image');
+          const embed = new EmbedBuilder()
+            .setColor(INFO)
+            .setTitle('Primary Image')
+            .setDescription(`Choose a time period for the **${formatConfig(selectedType)}** image.`)
+            .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) });
+          if (imgUrl) embed.setThumbnail(imgUrl);
+          await i.update({ embeds: [embed], components: getPeriodComponents() });
         }
 
       } else if (i.customId === 'primary_period' && selectedType && i.isStringSelectMenu()) {
         await i.deferUpdate();
         const period = i.values[0] as PrimaryImagePeriod;
-        const imgUrl = getImageUrl('primary_image');
-        const placeholderEmbed = new EmbedBuilder().setColor(INFO).setTitle('Primary Image')
-          .setDescription(`Chosen: **${formatConfig(selectedType, period)}**`);
-        if (imgUrl) placeholderEmbed.setThumbnail(imgUrl);
 
         await interaction.editReply({
-          embeds: [placeholderEmbed],
           components: [
-            new ActionRowBuilder<any>().addComponents(StringSelectMenuBuilder.from(periodSelect).setDisabled(true).setPlaceholder(getPeriodLabel(period))),
+            new ActionRowBuilder<any>().addComponents(
+              buildDisabledSelect(periodSelect, period, getPeriodLabel(period)),
+            ),
             new ActionRowBuilder<any>().addComponents(ButtonBuilder.from(backBtn).setDisabled(true)),
           ],
         });
@@ -1055,15 +1042,11 @@ async function handleConfig(
         if (selectedSecondaryType === 'avatar' || selectedSecondaryType === 'last_scrobble' || selectedSecondaryType === 'last_scrobble_artist') {
           await i.deferUpdate();
 
-          const imgUrl = getImageUrl('secondary_image');
-          const placeholderEmbed = new EmbedBuilder().setColor(INFO).setTitle('Secondary Image')
-            .setDescription(`Chosen: **${formatConfig(selectedSecondaryType)}**`);
-          if (imgUrl) placeholderEmbed.setThumbnail(imgUrl);
-
           await interaction.editReply({
-            embeds: [placeholderEmbed],
             components: [
-              new ActionRowBuilder<any>().addComponents(StringSelectMenuBuilder.from(secondaryTypeSelect).setDisabled(true).setPlaceholder(formatConfig(selectedSecondaryType))),
+              new ActionRowBuilder<any>().addComponents(
+                buildDisabledSelect(secondaryTypeSelect, selectedSecondaryType, formatConfig(selectedSecondaryType)),
+              ),
               new ActionRowBuilder<any>().addComponents(ButtonBuilder.from(backBtn).setDisabled(true)),
             ],
           });
@@ -1083,30 +1066,25 @@ async function handleConfig(
             components: getMainComponents(),
           });
         } else if (selectedSecondaryType) {
-          await i.update({
-            embeds: [
-              new EmbedBuilder()
-                .setColor(INFO)
-                .setTitle('Secondary Image')
-                .setDescription(`Choose a time period for the **${formatConfig(selectedSecondaryType)}** image.`)
-                .addFields({ name: 'Current', value: formatConfig(user.secondary_image_type, user.secondary_image_period) }),
-            ],
-            components: getSecondaryPeriodComponents(),
-          });
+          const imgUrl = getImageUrl('secondary_image');
+          const embed = new EmbedBuilder()
+            .setColor(INFO)
+            .setTitle('Secondary Image')
+            .setDescription(`Choose a time period for the **${formatConfig(selectedSecondaryType)}** image.`)
+            .addFields({ name: 'Current', value: formatConfig(user.secondary_image_type, user.secondary_image_period) });
+          if (imgUrl) embed.setThumbnail(imgUrl);
+          await i.update({ embeds: [embed], components: getSecondaryPeriodComponents() });
         }
 
       } else if (i.customId === 'secondary_period' && selectedSecondaryType && i.isStringSelectMenu()) {
         await i.deferUpdate();
         const period = i.values[0] as SecondaryImagePeriod;
-        const imgUrl = getImageUrl('secondary_image');
-        const placeholderEmbed = new EmbedBuilder().setColor(INFO).setTitle('Secondary Image')
-          .setDescription(`Chosen: **${formatConfig(selectedSecondaryType, period)}**`);
-        if (imgUrl) placeholderEmbed.setThumbnail(imgUrl);
 
         await interaction.editReply({
-          embeds: [placeholderEmbed],
           components: [
-            new ActionRowBuilder<any>().addComponents(StringSelectMenuBuilder.from(secondaryPeriodSelect).setDisabled(true).setPlaceholder(getPeriodLabel(period))),
+            new ActionRowBuilder<any>().addComponents(
+              buildDisabledSelect(secondaryPeriodSelect, period, getPeriodLabel(period)),
+            ),
             new ActionRowBuilder<any>().addComponents(ButtonBuilder.from(backBtn).setDisabled(true)),
           ],
         });
