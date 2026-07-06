@@ -504,8 +504,8 @@ async function handleConfig(
     ];
   }
 
-  async function slotDetailView(i: any): Promise<void> {
-    if (selectedSlot === null || !pendingSlotConfig) return;
+  function getSlotDetailPayload(): { embeds: EmbedBuilder[]; components: ActionRowBuilder<any>[] } {
+    if (selectedSlot === null || !pendingSlotConfig) return { embeds: [], components: [] };
     const slot = pendingSlotConfig;
     const periodLabel = slot.period === 'cycle' ? 'Cycle' : slot.period === '7d' ? 'Last 7 Days' : slot.period === '30d' ? 'Last 30 Days' : 'Overall';
     const showSuffix = slot.showSuffix;
@@ -521,7 +521,7 @@ async function handleConfig(
       } catch {}
     }
 
-    await i.update({
+    return {
       embeds: [
         new EmbedBuilder()
           .setColor(INFO)
@@ -533,7 +533,17 @@ async function handleConfig(
         new ActionRowBuilder<any>().addComponents(changePeriodBtn, buildToggleSuffixBtn(showSuffix)),
         new ActionRowBuilder<any>().addComponents(saveSlotBtn, switchStatBtn, cancelSlotBtn),
       ],
-    });
+    };
+  }
+
+  async function slotDetailView(i: any): Promise<void> {
+    const payload = getSlotDetailPayload();
+    if (payload.embeds.length) await i.update(payload);
+  }
+
+  async function editSlotDetailView(): Promise<void> {
+    const payload = getSlotDetailPayload();
+    if (payload.embeds.length) await interaction.editReply(payload);
   }
 
   let selectedSlot: number | null = null;
@@ -852,7 +862,7 @@ async function handleConfig(
           await sel.update({ components: [] });
           await periodMsg.delete().catch(() => {});
         } catch { /* timed out */ }
-        await slotDetailView(i);
+        await editSlotDetailView();
 
       } else if (i.customId === 'slot_switch_stat') {
         await i.deferUpdate();
@@ -872,7 +882,7 @@ async function handleConfig(
           await sel.update({ components: [] });
           await statMsg.delete().catch(() => {});
         } catch { /* timed out */ }
-        await slotDetailView(i);
+        await editSlotDetailView();
 
       } else if (i.customId === 'slot_save_slot') {
         if (selectedSlot !== null && pendingSlotConfig) {
