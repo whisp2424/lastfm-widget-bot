@@ -445,8 +445,13 @@ async function handleConfig(
   function getPeriodSuffix(period: string): string {
     if (period === '7d') return 'last 7d';
     if (period === '30d') return 'last 30d';
-    if (period === 'cycle') return CYCLE_PERIODS[(user.cycle_index - 1 + 3) % 3];
+    if (period === 'cycle') return 'cycle';
     return 'overall';
+  }
+
+  function getResolvedPeriodLabel(period: string): string {
+    if (period === 'cycle') return CYCLE_PERIODS[(user.cycle_index - 1 + 3) % 3];
+    return getPeriodSuffix(period);
   }
 
   function buildWidgetEmbed(slots: StatSlotConfig[], unsaved: boolean): EmbedBuilder {
@@ -520,9 +525,10 @@ async function handleConfig(
     if (selectedSlot === null || !pendingSlotConfig) return { embeds: [], components: [] };
     const slot = pendingSlotConfig;
     const periodLabel = getPeriodSuffix(slot.period);
+    const resolvedLabel = getResolvedPeriodLabel(slot.period);
     const showSuffix = slot.showSuffix;
     const statName = STAT_KEY_LABELS[slot.key] ?? slot.key;
-    const subtitle = showSuffix ? `${statName} (${periodLabel})` : statName;
+    const subtitle = showSuffix ? `${statName} (${resolvedLabel})` : statName;
 
     let statValue = '\u200b';
     if (user.cached_data) {
@@ -539,7 +545,7 @@ async function handleConfig(
           .setColor(INFO)
           .setTitle(`Editing Slot #${selectedSlot + 1}`)
           .addFields({ name: statValue, value: subtitle, inline: false })
-          .setFooter({ text: `Currently showing value for period ${periodLabel.toLowerCase()}, period will be ${showSuffix ? 'shown' : 'hidden'} for this slot.` }),
+          .setFooter({ text: `Currently showing value for period **${periodLabel}**, period will be **${showSuffix ? 'shown' : 'hidden'}** for this slot.` }),
       ],
       components: [
         new ActionRowBuilder<any>().addComponents(changePeriodBtn, buildToggleSuffixBtn(showSuffix)),
