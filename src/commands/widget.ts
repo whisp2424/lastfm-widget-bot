@@ -431,6 +431,12 @@ async function handleConfig(
     return statOrderToConfig(user.stat_order, user.show_period_suffix === 1);
   }
 
+  function getPeriodSuffix(period: string): string {
+    if (period === '7d') return 'last 7d';
+    if (period === '30d') return 'last 30d';
+    return 'overall';
+  }
+
   function buildWidgetEmbed(slots: StatSlotConfig[], unsaved: boolean): EmbedBuilder {
     const title = unsaved ? 'Widget Editor (unsaved)' : 'Widget Editor';
     const embed = new EmbedBuilder()
@@ -447,10 +453,11 @@ async function handleConfig(
         for (let i = 0; i < 6; i++) {
           const slot = slots[i];
           const val = payload.data.dynamic.find(f => f.name === `stat_value_${i}`);
-          const sub = payload.data.dynamic.find(f => f.name === `stat_subtitle_${i}`);
+          const statName = STAT_KEY_LABELS[slot.key] ?? slot.key;
+          const subtitle = slot.showSuffix ? `${statName} (${getPeriodSuffix(slot.period)})` : statName;
           embed.addFields({
             name: val ? String(val.value) : '\u200b',
-            value: sub ? String(sub.value) : STAT_KEY_LABELS[slot.key],
+            value: subtitle,
             inline: true,
           });
         }
