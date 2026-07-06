@@ -317,7 +317,7 @@ async function handleConfig(
     .setPlaceholder('Choose visibility...')
     .addOptions(
       new StringSelectMenuOptionBuilder().setLabel('Show Username').setDescription('Display your Last.fm username in the widget').setValue('show').setEmoji('👤'),
-      new StringSelectMenuOptionBuilder().setLabel('Hide Username').setDescription('Replace your username with "Last.fm"').setValue('hide').setEmoji('🔒'),
+      new StringSelectMenuOptionBuilder().setLabel('Hide Username').setDescription('Hide your username in the widget').setValue('hide').setEmoji('🔒'),
     );
 
   const settingsSelect = new StringSelectMenuBuilder()
@@ -646,6 +646,16 @@ async function handleConfig(
     ];
   }
 
+  function getImageUrl(field: string): string | null {
+    if (!user.cached_data) return null;
+    try {
+      const payload: WidgetPayload = JSON.parse(user.cached_data);
+      const f = payload.data.dynamic.find(e => e.name === field);
+      if (f && f.type === 3) return (f.value as { url: string }).url;
+    } catch {}
+    return null;
+  }
+
   const reply = await interaction.editReply({ embeds: [mainEmbed], components: getMainComponents() });
 
   let state: 'main' | 'primary_image' | 'secondary_image' | 'hide_username' | 'stat_order' = 'main';
@@ -849,11 +859,11 @@ async function handleConfig(
             new EmbedBuilder()
               .setColor(INFO)
               .setTitle('Hide Username')
-              .setDescription('Choose whether your Last.fm username appears in the widget.'),
+              .setDescription(`Chosen: **${hide ? 'Hide Username' : 'Show Username'}**`),
           ],
           components: [
             new ActionRowBuilder<any>().addComponents(
-              StringSelectMenuBuilder.from(hideUsernameSelect).setDisabled(true),
+              StringSelectMenuBuilder.from(hideUsernameSelect).setDisabled(true).setPlaceholder(hide ? 'Hide Username' : 'Show Username'),
             ),
             new ActionRowBuilder<any>().addComponents(ButtonBuilder.from(backBtn).setDisabled(true)),
           ],
@@ -871,17 +881,8 @@ async function handleConfig(
         getFreshUser();
 
         await interaction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(INFO)
-              .setTitle('Hide Username')
-              .setDescription('Choose whether your Last.fm username appears in the widget.')
-              .addFields({ name: 'Current', value: user.hide_username ? 'Hidden' : 'Visible', inline: true }),
-          ],
-          components: [
-            new ActionRowBuilder<any>().addComponents(hideUsernameSelect),
-            new ActionRowBuilder<any>().addComponents(backBtn),
-          ],
+          embeds: [buildMainConfigEmbed(user)],
+          components: getMainComponents(),
         });
 
       } else if (i.customId === 'slot_pick' && i.isStringSelectMenu()) {
@@ -968,17 +969,29 @@ async function handleConfig(
         getFreshUser();
         pendingChanges = false;
 
-        const freshSlots = parseSlots();
+        state = 'main';
         await interaction.editReply({
-          embeds: [buildWidgetEmbed(freshSlots, false)],
-          components: buildWidgetComponents(freshSlots),
+          embeds: [buildMainConfigEmbed(user)],
+          components: getMainComponents(),
         });
 
       } else if (i.customId === 'primary_type' && i.isStringSelectMenu()) {
         selectedType = i.values[0];
         if (selectedType === 'avatar' || selectedType === 'last_scrobble' || selectedType === 'last_scrobble_artist') {
           await i.deferUpdate();
-          await interaction.editReply({ components: getTypeComponents(true) });
+
+          const imgUrl = getImageUrl('primary_image');
+          const placeholderEmbed = new EmbedBuilder().setColor(INFO).setTitle('Primary Image')
+            .setDescription(`Chosen: **${formatConfig(selectedType)}**`);
+          if (imgUrl) placeholderEmbed.setThumbnail(imgUrl);
+
+          await interaction.editReply({
+            embeds: [placeholderEmbed],
+            components: [
+              new ActionRowBuilder<any>().addComponents(StringSelectMenuBuilder.from(typeSelect).setDisabled(true).setPlaceholder(formatConfig(selectedType))),
+              new ActionRowBuilder<any>().addComponents(ButtonBuilder.from(backBtn).setDisabled(true)),
+            ],
+          });
 
           setPrimaryImageConfig(interaction.user.id, selectedType as 'avatar' | 'last_scrobble' | 'last_scrobble_artist', 'overall');
           user.primary_image_type = selectedType as 'avatar' | 'last_scrobble' | 'last_scrobble_artist';
@@ -991,14 +1004,8 @@ async function handleConfig(
           }
           getFreshUser();
           await interaction.editReply({
-            embeds: [
-              new EmbedBuilder()
-                .setColor(INFO)
-                .setTitle('Primary Image')
-                .setDescription('Choose which image appears as the primary image on your Discord profile widget.')
-                .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) }),
-            ],
-            components: getTypeComponents(),
+            embeds: [buildMainConfigEmbed(user)],
+            components: getMainComponents(),
           });
         } else if (selectedType) {
           await i.update({
@@ -1015,9 +1022,20 @@ async function handleConfig(
 
       } else if (i.customId === 'primary_period' && selectedType && i.isStringSelectMenu()) {
         await i.deferUpdate();
-        await interaction.editReply({ components: getPeriodComponents(true) });
-
         const period = i.values[0] as PrimaryImagePeriod;
+        const imgUrl = getImageUrl('primary_image');
+        const placeholderEmbed = new EmbedBuilder().setColor(INFO).setTitle('Primary Image')
+          .setDescription(`Chosen: **${formatConfig(selectedType, period)}**`);
+        if (imgUrl) placeholderEmbed.setThumbnail(imgUrl);
+
+        await interaction.editReply({
+          embeds: [placeholderEmbed],
+          components: [
+            new ActionRowBuilder<any>().addComponents(StringSelectMenuBuilder.from(periodSelect).setDisabled(true).setPlaceholder(getPeriodLabel(period))),
+            new ActionRowBuilder<any>().addComponents(ButtonBuilder.from(backBtn).setDisabled(true)),
+          ],
+        });
+
         setPrimaryImageConfig(interaction.user.id, selectedType as 'artist' | 'track' | 'album', period);
         user.primary_image_type = selectedType as 'artist' | 'track' | 'album';
         user.primary_image_period = period;
@@ -1029,20 +1047,26 @@ async function handleConfig(
         }
         getFreshUser();
         await interaction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(INFO)
-              .setTitle('Primary Image')
-              .setDescription(`Choose a time period for the **${formatConfig(selectedType)}** image.`)
-              .addFields({ name: 'Current', value: formatConfig(user.primary_image_type, user.primary_image_period) }),
-          ],
-          components: getPeriodComponents(),
+          embeds: [buildMainConfigEmbed(user)],
+          components: getMainComponents(),
         });
       } else if (i.customId === 'secondary_type' && i.isStringSelectMenu()) {
         selectedSecondaryType = i.values[0];
         if (selectedSecondaryType === 'avatar' || selectedSecondaryType === 'last_scrobble' || selectedSecondaryType === 'last_scrobble_artist') {
           await i.deferUpdate();
-          await interaction.editReply({ components: getSecondaryTypeComponents(true) });
+
+          const imgUrl = getImageUrl('secondary_image');
+          const placeholderEmbed = new EmbedBuilder().setColor(INFO).setTitle('Secondary Image')
+            .setDescription(`Chosen: **${formatConfig(selectedSecondaryType)}**`);
+          if (imgUrl) placeholderEmbed.setThumbnail(imgUrl);
+
+          await interaction.editReply({
+            embeds: [placeholderEmbed],
+            components: [
+              new ActionRowBuilder<any>().addComponents(StringSelectMenuBuilder.from(secondaryTypeSelect).setDisabled(true).setPlaceholder(formatConfig(selectedSecondaryType))),
+              new ActionRowBuilder<any>().addComponents(ButtonBuilder.from(backBtn).setDisabled(true)),
+            ],
+          });
 
           setSecondaryImageConfig(interaction.user.id, selectedSecondaryType as 'avatar' | 'last_scrobble' | 'last_scrobble_artist', 'overall');
           user.secondary_image_type = selectedSecondaryType as 'avatar' | 'last_scrobble' | 'last_scrobble_artist';
@@ -1055,14 +1079,8 @@ async function handleConfig(
           }
           getFreshUser();
           await interaction.editReply({
-            embeds: [
-              new EmbedBuilder()
-                .setColor(INFO)
-                .setTitle('Secondary Image')
-                .setDescription('Choose which image appears as the secondary image on your Discord profile widget.')
-                .addFields({ name: 'Current', value: formatConfig(user.secondary_image_type, user.secondary_image_period) }),
-            ],
-            components: getSecondaryTypeComponents(),
+            embeds: [buildMainConfigEmbed(user)],
+            components: getMainComponents(),
           });
         } else if (selectedSecondaryType) {
           await i.update({
@@ -1079,9 +1097,20 @@ async function handleConfig(
 
       } else if (i.customId === 'secondary_period' && selectedSecondaryType && i.isStringSelectMenu()) {
         await i.deferUpdate();
-        await interaction.editReply({ components: getSecondaryPeriodComponents(true) });
-
         const period = i.values[0] as SecondaryImagePeriod;
+        const imgUrl = getImageUrl('secondary_image');
+        const placeholderEmbed = new EmbedBuilder().setColor(INFO).setTitle('Secondary Image')
+          .setDescription(`Chosen: **${formatConfig(selectedSecondaryType, period)}**`);
+        if (imgUrl) placeholderEmbed.setThumbnail(imgUrl);
+
+        await interaction.editReply({
+          embeds: [placeholderEmbed],
+          components: [
+            new ActionRowBuilder<any>().addComponents(StringSelectMenuBuilder.from(secondaryPeriodSelect).setDisabled(true).setPlaceholder(getPeriodLabel(period))),
+            new ActionRowBuilder<any>().addComponents(ButtonBuilder.from(backBtn).setDisabled(true)),
+          ],
+        });
+
         setSecondaryImageConfig(interaction.user.id, selectedSecondaryType as 'artist' | 'track' | 'album', period);
         user.secondary_image_type = selectedSecondaryType as 'artist' | 'track' | 'album';
         user.secondary_image_period = period;
@@ -1093,14 +1122,8 @@ async function handleConfig(
         }
         getFreshUser();
         await interaction.editReply({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(INFO)
-              .setTitle('Secondary Image')
-              .setDescription(`Choose a time period for the **${formatConfig(selectedSecondaryType)}** image.`)
-              .addFields({ name: 'Current', value: formatConfig(user.secondary_image_type, user.secondary_image_period) }),
-          ],
-          components: getSecondaryPeriodComponents(),
+          embeds: [buildMainConfigEmbed(user)],
+          components: getMainComponents(),
         });
       }
     } catch (err) {
