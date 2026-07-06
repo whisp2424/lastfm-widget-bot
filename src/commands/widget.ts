@@ -470,7 +470,7 @@ async function handleConfig(
           const slot = slots[i];
           const val = payload.data.dynamic.find(f => f.name === `stat_value_${i}`);
           const statName = STAT_KEY_LABELS[slot.key] ?? slot.key;
-          const subtitle = slot.showSuffix ? `${statName} (${getPeriodSuffix(slot.period)})` : statName;
+          const subtitle = slot.showSuffix ? `${statName} (${getResolvedPeriodLabel(slot.period)})` : statName;
           embed.addFields({
             name: val ? String(val.value) : '\u200b',
             value: subtitle,
