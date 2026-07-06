@@ -339,7 +339,7 @@ async function handleConfig(
         .setLabel('Widget Editor')
         .setDescription('Customize stats, periods, and suffixes')
         .setValue('stat_order')
-        .setEmoji('🔀'),
+        .setEmoji('✏️'),
       new StringSelectMenuOptionBuilder()
         .setLabel('Hide Username')
         .setDescription('Replace your username with "Last.fm" in the widget')
@@ -394,16 +394,38 @@ async function handleConfig(
       new StringSelectMenuOptionBuilder().setLabel('Cycle').setDescription('Cycle through periods on each refresh').setValue('cycle'),
     );
 
-  const slotSuffixBtn = new ButtonBuilder()
-    .setCustomId('slot_suffix')
-    .setLabel('Show period suffix')
+  const changePeriodBtn = new ButtonBuilder()
+    .setCustomId('slot_change_period')
+    .setLabel('Change period')
     .setStyle(ButtonStyle.Secondary);
 
-  function buildSlotSuffixBtn(show: boolean): ButtonBuilder {
-    return ButtonBuilder.from(slotSuffixBtn)
+  const toggleSuffixBtn = new ButtonBuilder()
+    .setCustomId('slot_toggle_suffix')
+    .setLabel('Hide period suffix')
+    .setStyle(ButtonStyle.Secondary);
+
+  function buildToggleSuffixBtn(show: boolean): ButtonBuilder {
+    return ButtonBuilder.from(toggleSuffixBtn)
       .setLabel(show ? 'Hide period suffix' : 'Show period suffix')
       .setStyle(show ? ButtonStyle.Primary : ButtonStyle.Secondary);
   }
+
+  const switchStatBtn = new ButtonBuilder()
+    .setCustomId('slot_switch_stat')
+    .setLabel('Switch stats')
+    .setStyle(ButtonStyle.Secondary);
+
+  const saveSlotBtn = new ButtonBuilder()
+    .setCustomId('slot_save_slot')
+    .setLabel('Save')
+    .setStyle(ButtonStyle.Success);
+
+  const cancelSlotBtn = new ButtonBuilder()
+    .setCustomId('slot_cancel')
+    .setLabel('Cancel')
+    .setStyle(ButtonStyle.Danger);
+
+  let pendingSlotConfig: StatSlotConfig | null = null;
 
   function parseSlots(): StatSlotConfig[] {
     return statOrderToConfig(user.stat_order, user.show_period_suffix === 1);
@@ -414,7 +436,8 @@ async function handleConfig(
     const embed = new EmbedBuilder()
       .setColor(INFO)
       .setTitle(title)
-      .setDescription('Select a slot to edit, then press **Save Changes** to apply.');
+      .setDescription('Select a slot to edit below.')
+      .setFooter({ text: 'Press Save Changes to apply.' });
 
     if (user.cached_data) {
       try {
@@ -444,7 +467,7 @@ async function handleConfig(
     slots.forEach((slot, i) => {
       select.addOptions(
         new StringSelectMenuOptionBuilder()
-          .setLabel(`Slot ${i + 1} (${STAT_KEY_LABELS[slot.key]})`)
+          .setLabel(`Slot #${i + 1} (${STAT_KEY_LABELS[slot.key]})`)
           .setValue(`${i}`),
       );
     });
@@ -472,6 +495,36 @@ async function handleConfig(
       new ActionRowBuilder<any>().addComponents(pick),
       new ActionRowBuilder<any>().addComponents(back, reset, save),
     ];
+  }
+
+  async function slotDetailView(i: any): Promise<void> {
+    if (selectedSlot === null || !pendingSlotConfig) return;
+    const slot = pendingSlotConfig;
+    const periodLabel = slot.period === 'cycle' ? 'Cycle' : slot.period === '7d' ? 'Last 7 Days' : slot.period === '30d' ? 'Last 30 Days' : 'Overall';
+    const showSuffix = slot.showSuffix;
+
+    let statValue = '\u200b';
+    if (user.cached_data) {
+      try {
+        const payload: WidgetPayload = JSON.parse(user.cached_data);
+        const val = payload.data.dynamic.find(f => f.name === `stat_value_${selectedSlot}`);
+        if (val) statValue = `**${val.value}**`;
+      } catch {}
+    }
+
+    await i.update({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(INFO)
+          .setTitle(`Editing Slot #${selectedSlot + 1}`)
+          .addFields({ name: STAT_KEY_LABELS[slot.key], value: statValue, inline: false })
+          .setDescription(`Currently showing value for period **${periodLabel.toLowerCase()}**, period will be **${showSuffix ? 'shown' : 'hidden'}** for this slot.`),
+      ],
+      components: [
+        new ActionRowBuilder<any>().addComponents(changePeriodBtn, buildToggleSuffixBtn(showSuffix)),
+        new ActionRowBuilder<any>().addComponents(switchStatBtn, saveSlotBtn, cancelSlotBtn),
+      ],
+    });
   }
 
   let selectedSlot: number | null = null;
@@ -589,6 +642,7 @@ async function handleConfig(
         } else if (value === 'stat_order') {
           state = 'stat_order';
           selectedSlot = null;
+          pendingSlotConfig = null;
           pendingChanges = false;
           const slots = parseSlots();
           await i.update({
@@ -600,6 +654,7 @@ async function handleConfig(
       } else if (i.customId === 'config_back') {
         if (state === 'stat_order' && selectedSlot !== null) {
           selectedSlot = null;
+          pendingSlotConfig = null;
           const slots = parseSlots();
           await i.update({
             embeds: [buildWidgetEmbed(slots, pendingChanges)],
@@ -763,65 +818,72 @@ async function handleConfig(
       } else if (i.customId === 'slot_pick' && i.isStringSelectMenu()) {
         selectedSlot = parseInt(i.values[0], 10);
         const slots = parseSlots();
-        const slot = slots[selectedSlot];
-        const periodLabel = slot.period === 'cycle' ? 'Cycle' : slot.period === '7d' ? 'Last 7 Days' : slot.period === '30d' ? 'Last 30 Days' : 'Overall';
-        const suffixLabel = slot.showSuffix ? 'Shown' : 'Hidden';
+        pendingSlotConfig = { ...slots[selectedSlot] };
+        await slotDetailView(i);
 
-        let statValue = '\u200b';
-        if (user.cached_data) {
-          try {
-            const payload: WidgetPayload = JSON.parse(user.cached_data);
-            const val = payload.data.dynamic.find(f => f.name === `stat_value_${selectedSlot}`);
-            if (val) statValue = `**${val.value}**`;
-          } catch {}
+      } else if (i.customId === 'slot_toggle_suffix') {
+        if (pendingSlotConfig) pendingSlotConfig.showSuffix = !pendingSlotConfig.showSuffix;
+        await slotDetailView(i);
+
+      } else if (i.customId === 'slot_change_period') {
+        await i.deferUpdate();
+        const periodMsg = await interaction.followUp({
+          embeds: [new EmbedBuilder().setColor(INFO).setTitle('Choose a Period')],
+          components: [new ActionRowBuilder<any>().addComponents(slotPeriodSelect)],
+          ephemeral: true,
+        });
+        try {
+          const sel = await periodMsg.awaitMessageComponent({
+            filter: (ci) => ci.user.id === interaction.user.id,
+            time: 30_000,
+          });
+          if (sel.isStringSelectMenu() && pendingSlotConfig) {
+            pendingSlotConfig.period = sel.values[0] as StatPeriod;
+          }
+          await sel.update({ components: [] });
+        } catch { /* timed out */ }
+        await slotDetailView(i);
+
+      } else if (i.customId === 'slot_switch_stat') {
+        await i.deferUpdate();
+        const statMsg = await interaction.followUp({
+          embeds: [new EmbedBuilder().setColor(INFO).setTitle('Choose a Stat')],
+          components: [new ActionRowBuilder<any>().addComponents(statAssignSelect)],
+          ephemeral: true,
+        });
+        try {
+          const sel = await statMsg.awaitMessageComponent({
+            filter: (ci) => ci.user.id === interaction.user.id,
+            time: 30_000,
+          });
+          if (sel.isStringSelectMenu() && pendingSlotConfig) {
+            pendingSlotConfig.key = sel.values[0] as StatKey;
+          }
+          await sel.update({ components: [] });
+        } catch { /* timed out */ }
+        await slotDetailView(i);
+
+      } else if (i.customId === 'slot_save_slot') {
+        if (selectedSlot !== null && pendingSlotConfig) {
+          const slots = parseSlots();
+          slots[selectedSlot] = pendingSlotConfig;
+          user.stat_order = JSON.stringify(slots);
+          pendingChanges = true;
         }
-
-        await i.update({
-          embeds: [
-            new EmbedBuilder()
-              .setColor(INFO)
-              .setTitle(`Slot ${selectedSlot + 1}: ${STAT_KEY_LABELS[slot.key]}`)
-              .setDescription(`${statValue}\n\n**Period:** ${periodLabel}\n**Suffix:** ${suffixLabel}`),
-          ],
-          components: [
-            new ActionRowBuilder<any>().addComponents(statAssignSelect),
-            new ActionRowBuilder<any>().addComponents(slotPeriodSelect),
-            new ActionRowBuilder<any>().addComponents(backBtn, buildSlotSuffixBtn(slot.showSuffix)),
-          ],
-        });
-
-      } else if (i.customId === 'stat_assign' && i.isStringSelectMenu() && selectedSlot !== null) {
-        const newStat = i.values[0] as StatKey;
-        const slots = parseSlots();
-        slots[selectedSlot] = { ...slots[selectedSlot], key: newStat };
-        user.stat_order = JSON.stringify(slots);
-        pendingChanges = true;
         selectedSlot = null;
+        pendingSlotConfig = null;
+        const slots = parseSlots();
         await i.update({
           embeds: [buildWidgetEmbed(slots, true)],
           components: buildWidgetComponents(slots),
         });
 
-      } else if (i.customId === 'slot_period' && i.isStringSelectMenu() && selectedSlot !== null) {
-        const period = i.values[0] as StatPeriod;
-        const slots = parseSlots();
-        slots[selectedSlot] = { ...slots[selectedSlot], period };
-        user.stat_order = JSON.stringify(slots);
-        pendingChanges = true;
+      } else if (i.customId === 'slot_cancel') {
         selectedSlot = null;
-        await i.update({
-          embeds: [buildWidgetEmbed(slots, true)],
-          components: buildWidgetComponents(slots),
-        });
-
-      } else if (i.customId === 'slot_suffix' && selectedSlot !== null) {
+        pendingSlotConfig = null;
         const slots = parseSlots();
-        slots[selectedSlot] = { ...slots[selectedSlot], showSuffix: !slots[selectedSlot].showSuffix };
-        user.stat_order = JSON.stringify(slots);
-        pendingChanges = true;
-        selectedSlot = null;
         await i.update({
-          embeds: [buildWidgetEmbed(slots, true)],
+          embeds: [buildWidgetEmbed(slots, pendingChanges)],
           components: buildWidgetComponents(slots),
         });
 
