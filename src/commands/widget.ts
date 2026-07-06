@@ -18,7 +18,7 @@ import { getNextRefreshIn, resetSchedulerTimer } from '../services/scheduler.js'
 import { waitForOAuth } from '../oauth-store.js';
 import type { LastFmService } from '../services/lastfm.js';
 import { DEFAULT_STAT_ORDER } from '../types.js';
-import type { PrimaryImagePeriod, SecondaryImageType, SecondaryImagePeriod, WidgetPayload, UserRow, StatKey, StatSlotConfig, StatPeriod } from '../types.js';
+import type { PrimaryImagePeriod, SecondaryImageType, SecondaryImagePeriod, WidgetPayload, UserRow, StatKey, StatSlotConfig, StatPeriod, CachedStats } from '../types.js';
 
 const SUCCESS = 0xa6e3a1;
 const ERROR = 0xba0000;
@@ -453,6 +453,19 @@ async function handleConfig(
     return getPeriodSuffix(period);
   }
 
+  function getEditorStatValue(slot: StatSlotConfig): string {
+    const cs: CachedStats | null = user.cached_stats ? JSON.parse(user.cached_stats) : null;
+    if (!cs) return '\u200b';
+    if (slot.key === 'scrobbles') return cs.total_scrobbles;
+    if (slot.key === 'artists') return cs.total_artists;
+    if (slot.key === 'loved_tracks') return cs.loved_tracks;
+    const effectivePeriod = slot.period === 'cycle'
+      ? CYCLE_PERIODS[(user.cycle_index - 1 + 3) % 3]
+      : slot.period;
+    const key = (effectivePeriod === 'overall' ? slot.key : `${slot.key}_${effectivePeriod}`) as keyof CachedStats;
+    return (cs as any)[key] ?? '\u200b';
+  }
+
   function buildWidgetEmbed(slots: StatSlotConfig[], unsaved: boolean): EmbedBuilder {
     const title = unsaved ? 'Widget Editor (unsaved)' : 'Widget Editor';
     const embed = new EmbedBuilder()
@@ -468,11 +481,11 @@ async function handleConfig(
         if (img && img.type === 3) embed.setThumbnail((img.value as { url: string }).url);
         for (let i = 0; i < 6; i++) {
           const slot = slots[i];
-          const val = payload.data.dynamic.find(f => f.name === `stat_value_${i}`);
+          const val = getEditorStatValue(slot);
           const statName = STAT_KEY_LABELS[slot.key] ?? slot.key;
           const subtitle = slot.showSuffix ? `${statName} (${getResolvedPeriodLabel(slot.period)})` : statName;
           embed.addFields({
-            name: val ? String(val.value) : '\u200b',
+            name: val,
             value: subtitle,
             inline: true,
           });
@@ -539,14 +552,7 @@ async function handleConfig(
       periodText = `Currently showing ${statLabel} for the ${resolvedLabel}`;
     }
 
-    let statValue = '\u200b';
-    if (user.cached_data) {
-      try {
-        const payload: WidgetPayload = JSON.parse(user.cached_data);
-        const val = payload.data.dynamic.find(f => f.name === `stat_value_${selectedSlot}`);
-        if (val) statValue = String(val.value);
-      } catch {}
-    }
+    const statValue = getEditorStatValue(slot);
 
     return {
       embeds: [
