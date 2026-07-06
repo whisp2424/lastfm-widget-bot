@@ -923,6 +923,12 @@ async function handleConfig(
         });
 
       } else if (i.customId === 'slot_cancel') {
+        if (selectedSlot !== null && pendingSlotConfig) {
+          const slots = parseSlots();
+          slots[selectedSlot] = pendingSlotConfig;
+          user.stat_order = JSON.stringify(slots);
+          pendingChanges = true;
+        }
         selectedSlot = null;
         pendingSlotConfig = null;
         selectionMode = null;
