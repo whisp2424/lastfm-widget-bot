@@ -555,7 +555,7 @@ async function handleConfig(
           .setColor(INFO)
           .setTitle(`Editing Slot #${selectedSlot + 1}`)
           .addFields({ name: statValue, value: subtitle, inline: false })
-          .setFooter({ text: periodText }),
+          .setFooter({ text: `${periodText}, period suffix will be ${showSuffix ? 'shown' : 'hidden'}.` }),
       ],
       components: [
         new ActionRowBuilder<any>().addComponents(changePeriodBtn, buildToggleSuffixBtn(showSuffix)),
