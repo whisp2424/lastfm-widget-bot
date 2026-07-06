@@ -524,11 +524,19 @@ async function handleConfig(
   function getSlotDetailPayload(): { embeds: EmbedBuilder[]; components: ActionRowBuilder<any>[] } {
     if (selectedSlot === null || !pendingSlotConfig) return { embeds: [], components: [] };
     const slot = pendingSlotConfig;
-    const periodLabel = getPeriodSuffix(slot.period);
     const resolvedLabel = getResolvedPeriodLabel(slot.period);
     const showSuffix = slot.showSuffix;
     const statName = STAT_KEY_LABELS[slot.key] ?? slot.key;
     const subtitle = showSuffix ? `${statName} (${resolvedLabel})` : statName;
+
+    let periodText: string;
+    if (slot.period === 'overall') {
+      periodText = `Currently showing overall ${slot.key}`;
+    } else if (slot.period === 'cycle') {
+      periodText = `Currently using cycle period, showing ${slot.key} for the ${resolvedLabel}`;
+    } else {
+      periodText = `Currently showing ${slot.key} for the ${resolvedLabel}`;
+    }
 
     let statValue = '\u200b';
     if (user.cached_data) {
@@ -545,7 +553,7 @@ async function handleConfig(
           .setColor(INFO)
           .setTitle(`Editing Slot #${selectedSlot + 1}`)
           .addFields({ name: statValue, value: subtitle, inline: false })
-          .setFooter({ text: `Currently showing value for period **${periodLabel}**, period will be **${showSuffix ? 'shown' : 'hidden'}** for this slot.` }),
+          .setFooter({ text: `${periodText}, period will be ${showSuffix ? 'shown' : 'hidden'} for this slot.` }),
       ],
       components: [
         new ActionRowBuilder<any>().addComponents(changePeriodBtn, buildToggleSuffixBtn(showSuffix)),
