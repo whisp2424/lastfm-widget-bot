@@ -518,7 +518,7 @@ async function handleConfig(
           .setColor(INFO)
           .setTitle(`Editing Slot #${selectedSlot + 1}`)
           .addFields({ name: STAT_KEY_LABELS[slot.key], value: statValue, inline: false })
-          .setDescription(`Currently showing value for period **${periodLabel.toLowerCase()}**, period will be **${showSuffix ? 'shown' : 'hidden'}** for this slot.`),
+          .setFooter({ text: `Currently showing value for period ${periodLabel.toLowerCase()}, period will be ${showSuffix ? 'shown' : 'hidden'} for this slot.` }),
       ],
       components: [
         new ActionRowBuilder<any>().addComponents(changePeriodBtn, buildToggleSuffixBtn(showSuffix)),
