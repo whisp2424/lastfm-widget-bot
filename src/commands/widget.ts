@@ -413,17 +413,17 @@ async function handleConfig(
   const switchStatBtn = new ButtonBuilder()
     .setCustomId('slot_switch_stat')
     .setLabel('Switch stats')
-    .setStyle(ButtonStyle.Primary);
+    .setStyle(ButtonStyle.Secondary);
 
   const saveSlotBtn = new ButtonBuilder()
     .setCustomId('slot_save_slot')
-    .setLabel('Save')
+    .setLabel('Save changes')
     .setStyle(ButtonStyle.Success);
 
   const cancelSlotBtn = new ButtonBuilder()
     .setCustomId('slot_cancel')
     .setLabel('Cancel')
-    .setStyle(ButtonStyle.Danger);
+    .setStyle(ButtonStyle.Secondary);
 
   let pendingSlotConfig: StatSlotConfig | null = null;
 
@@ -449,8 +449,8 @@ async function handleConfig(
           const val = payload.data.dynamic.find(f => f.name === `stat_value_${i}`);
           const sub = payload.data.dynamic.find(f => f.name === `stat_subtitle_${i}`);
           embed.addFields({
-            name: STAT_KEY_LABELS[slot.key] ?? slot.key,
-            value: val ? `**${val.value}**\n${(sub?.value as string) ?? ''}` : '\u200b',
+            name: val ? String(val.value) : '\u200b',
+            value: sub ? String(sub.value) : STAT_KEY_LABELS[slot.key],
             inline: true,
           });
         }
@@ -502,13 +502,15 @@ async function handleConfig(
     const slot = pendingSlotConfig;
     const periodLabel = slot.period === 'cycle' ? 'Cycle' : slot.period === '7d' ? 'Last 7 Days' : slot.period === '30d' ? 'Last 30 Days' : 'Overall';
     const showSuffix = slot.showSuffix;
+    const statName = STAT_KEY_LABELS[slot.key] ?? slot.key;
+    const subtitle = showSuffix ? `${statName} (${periodLabel.toLowerCase()})` : statName;
 
     let statValue = '\u200b';
     if (user.cached_data) {
       try {
         const payload: WidgetPayload = JSON.parse(user.cached_data);
         const val = payload.data.dynamic.find(f => f.name === `stat_value_${selectedSlot}`);
-        if (val) statValue = `**${val.value}**`;
+        if (val) statValue = String(val.value);
       } catch {}
     }
 
@@ -517,7 +519,7 @@ async function handleConfig(
         new EmbedBuilder()
           .setColor(INFO)
           .setTitle(`Editing Slot #${selectedSlot + 1}`)
-          .addFields({ name: STAT_KEY_LABELS[slot.key], value: statValue, inline: false })
+          .addFields({ name: statValue, value: subtitle, inline: false })
           .setFooter({ text: `Currently showing value for period ${periodLabel.toLowerCase()}, period will be ${showSuffix ? 'shown' : 'hidden'} for this slot.` }),
       ],
       components: [
@@ -828,7 +830,7 @@ async function handleConfig(
       } else if (i.customId === 'slot_change_period') {
         await i.deferUpdate();
         const periodMsg = await interaction.followUp({
-          embeds: [new EmbedBuilder().setColor(INFO).setTitle('Choose a Period')],
+          embeds: [new EmbedBuilder().setColor(INFO).setTitle('Choose a Period').setDescription('Select a time period for this slot.')],
           components: [new ActionRowBuilder<any>().addComponents(slotPeriodSelect)],
           ephemeral: true,
         });
@@ -841,13 +843,14 @@ async function handleConfig(
             pendingSlotConfig.period = sel.values[0] as StatPeriod;
           }
           await sel.update({ components: [] });
+          await periodMsg.delete().catch(() => {});
         } catch { /* timed out */ }
         await slotDetailView(i);
 
       } else if (i.customId === 'slot_switch_stat') {
         await i.deferUpdate();
         const statMsg = await interaction.followUp({
-          embeds: [new EmbedBuilder().setColor(INFO).setTitle('Choose a Stat')],
+          embeds: [new EmbedBuilder().setColor(INFO).setTitle('Choose a Stat').setDescription('Select a stat to display in this slot.')],
           components: [new ActionRowBuilder<any>().addComponents(statAssignSelect)],
           ephemeral: true,
         });
@@ -860,6 +863,7 @@ async function handleConfig(
             pendingSlotConfig.key = sel.values[0] as StatKey;
           }
           await sel.update({ components: [] });
+          await statMsg.delete().catch(() => {});
         } catch { /* timed out */ }
         await slotDetailView(i);
 
