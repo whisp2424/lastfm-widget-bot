@@ -193,6 +193,11 @@ export async function refreshUserWidget(
       name: 'scrobbling_since',
        value: `scrobbling since ${formatDate(info.registered.unixtime)}`,
     },
+    {
+      type: 1,
+      name: 'mini_profile_stat',
+      value: `${info.playcount.toLocaleString('en-US')} scrobbles`,
+    },
   ];
 
   statSlots.forEach((slot, i) => {
