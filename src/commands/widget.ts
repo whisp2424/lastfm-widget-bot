@@ -422,7 +422,7 @@ async function handleConfig(
 
   const cancelSlotBtn = new ButtonBuilder()
     .setCustomId('slot_cancel')
-    .setLabel('Cancel')
+    .setLabel('Back')
     .setStyle(ButtonStyle.Secondary);
 
   let pendingSlotConfig: StatSlotConfig | null = null;
@@ -493,7 +493,7 @@ async function handleConfig(
     const save = loading ? ButtonBuilder.from(saveBtn).setDisabled(true) : saveBtn;
     return [
       new ActionRowBuilder<any>().addComponents(pick),
-      new ActionRowBuilder<any>().addComponents(back, reset, save),
+      new ActionRowBuilder<any>().addComponents(save, back, reset),
     ];
   }
 
