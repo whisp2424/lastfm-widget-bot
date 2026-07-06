@@ -259,10 +259,10 @@ function buildMainConfigEmbed(user: UserRow): EmbedBuilder {
     .setColor(INFO)
     .setTitle('Widget Configuration')
     .setDescription('Use the dropdown below to configure your widget settings.')
-    .addFields({ name: 'Linked Account', value: `**${user.lastfm_username}**`, inline: false });
+    .addFields({ name: 'Linked Account', value: `**${user.lastfm_username}**`, inline: true });
 
   if (user.last_refresh_at) {
-    embed.addFields({ name: 'Last Refreshed', value: timeAgo(user.last_refresh_at), inline: false });
+    embed.addFields({ name: 'Last Refreshed', value: timeAgo(user.last_refresh_at), inline: true });
   }
 
   const nextIn = getNextRefreshIn();

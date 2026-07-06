@@ -116,9 +116,9 @@ export async function refreshUserWidget(
     safeFetch(lastfmService.getLovedTrackCount(username), 0),
   ]);
 
-  const shouldCycle = user.primary_image_period === 'cycle' || user.secondary_image_period === 'cycle';
-  const globalCyclePeriod = shouldCycle ? CYCLE_PERIODS[user.cycle_index] : null;
   const statSlots = statOrderToConfig(user.stat_order, user.show_period_suffix === 1);
+  const shouldCycle = user.primary_image_period === 'cycle' || user.secondary_image_period === 'cycle' || statSlots.some(s => s.period === 'cycle');
+  const globalCyclePeriod = shouldCycle ? CYCLE_PERIODS[user.cycle_index] : null;
 
   const avatarUrl = orDefault(
     info.image?.find((i) => i.size === 'extralarge')?.['#text']?.replace('/300x300/', '/500x500/'),
@@ -191,7 +191,7 @@ export async function refreshUserWidget(
     {
       type: 1,
       name: 'scrobbling_since',
-       value: `scrobbling since ${formatDate(info.registered.unixtime)}`,
+       value: `<t:${info.registered.unixtime}:D>`,
     },
   ];
 
