@@ -859,8 +859,7 @@ async function handleConfig(
           if (sel.isStringSelectMenu() && pendingSlotConfig) {
             pendingSlotConfig.period = sel.values[0] as StatPeriod;
           }
-          await sel.update({ components: [] });
-          await periodMsg.delete().catch(() => {});
+          await sel.message.delete().catch(() => {});
         } catch { /* timed out */ }
         await editSlotDetailView();
 
@@ -879,8 +878,7 @@ async function handleConfig(
           if (sel.isStringSelectMenu() && pendingSlotConfig) {
             pendingSlotConfig.key = sel.values[0] as StatKey;
           }
-          await sel.update({ components: [] });
-          await statMsg.delete().catch(() => {});
+          await sel.message.delete().catch(() => {});
         } catch { /* timed out */ }
         await editSlotDetailView();
 
