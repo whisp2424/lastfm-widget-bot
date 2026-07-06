@@ -425,7 +425,18 @@ async function handleConfig(
     .setLabel('Back')
     .setStyle(ButtonStyle.Secondary);
 
+  const confirmSelectBtn = new ButtonBuilder()
+    .setCustomId('slot_select_confirm')
+    .setLabel('Save changes')
+    .setStyle(ButtonStyle.Success);
+
+  const cancelSelectBtn = new ButtonBuilder()
+    .setCustomId('slot_select_cancel')
+    .setLabel('Cancel')
+    .setStyle(ButtonStyle.Secondary);
+
   let pendingSlotConfig: StatSlotConfig | null = null;
+  let selectionMode: 'period' | 'stat' | null = null;
 
   function parseSlots(): StatSlotConfig[] {
     return statOrderToConfig(user.stat_order, user.show_period_suffix === 1);
@@ -434,6 +445,7 @@ async function handleConfig(
   function getPeriodSuffix(period: string): string {
     if (period === '7d') return 'last 7d';
     if (period === '30d') return 'last 30d';
+    if (period === 'cycle') return CYCLE_PERIODS[(user.cycle_index - 1 + 3) % 3];
     return 'overall';
   }
 
@@ -507,10 +519,10 @@ async function handleConfig(
   function getSlotDetailPayload(): { embeds: EmbedBuilder[]; components: ActionRowBuilder<any>[] } {
     if (selectedSlot === null || !pendingSlotConfig) return { embeds: [], components: [] };
     const slot = pendingSlotConfig;
-    const periodLabel = slot.period === 'cycle' ? 'Cycle' : slot.period === '7d' ? 'Last 7 Days' : slot.period === '30d' ? 'Last 30 Days' : 'Overall';
+    const periodLabel = getPeriodSuffix(slot.period);
     const showSuffix = slot.showSuffix;
     const statName = STAT_KEY_LABELS[slot.key] ?? slot.key;
-    const subtitle = showSuffix ? `${statName} (${periodLabel.toLowerCase()})` : statName;
+    const subtitle = showSuffix ? `${statName} (${periodLabel})` : statName;
 
     let statValue = '\u200b';
     if (user.cached_data) {
@@ -541,9 +553,18 @@ async function handleConfig(
     if (payload.embeds.length) await i.update(payload);
   }
 
-  async function editSlotDetailView(): Promise<void> {
-    const payload = getSlotDetailPayload();
-    if (payload.embeds.length) await interaction.editReply(payload);
+  function getPeriodSelectComponents(): ActionRowBuilder<any>[] {
+    return [
+      new ActionRowBuilder<any>().addComponents(slotPeriodSelect),
+      new ActionRowBuilder<any>().addComponents(confirmSelectBtn, cancelSelectBtn),
+    ];
+  }
+
+  function getStatSelectComponents(): ActionRowBuilder<any>[] {
+    return [
+      new ActionRowBuilder<any>().addComponents(statAssignSelect),
+      new ActionRowBuilder<any>().addComponents(confirmSelectBtn, cancelSelectBtn),
+    ];
   }
 
   let selectedSlot: number | null = null;
@@ -845,42 +866,30 @@ async function handleConfig(
         await slotDetailView(i);
 
       } else if (i.customId === 'slot_change_period') {
-        await i.deferUpdate();
-        const periodMsg = await interaction.followUp({
-          embeds: [new EmbedBuilder().setColor(INFO).setTitle('Choose a Period').setDescription('Select a time period for this slot.')],
-          components: [new ActionRowBuilder<any>().addComponents(slotPeriodSelect)],
-          ephemeral: true,
-        });
-        try {
-          const sel = await periodMsg.awaitMessageComponent({
-            filter: (ci) => ci.user.id === interaction.user.id,
-            time: 30_000,
-          });
-          if (sel.isStringSelectMenu() && pendingSlotConfig) {
-            pendingSlotConfig.period = sel.values[0] as StatPeriod;
-          }
-          await sel.message.delete().catch(() => {});
-        } catch { /* timed out */ }
-        await editSlotDetailView();
+        selectionMode = 'period';
+        await i.update({ components: getPeriodSelectComponents() });
 
       } else if (i.customId === 'slot_switch_stat') {
-        await i.deferUpdate();
-        const statMsg = await interaction.followUp({
-          embeds: [new EmbedBuilder().setColor(INFO).setTitle('Choose a Stat').setDescription('Select a stat to display in this slot.')],
-          components: [new ActionRowBuilder<any>().addComponents(statAssignSelect)],
-          ephemeral: true,
-        });
-        try {
-          const sel = await statMsg.awaitMessageComponent({
-            filter: (ci) => ci.user.id === interaction.user.id,
-            time: 30_000,
-          });
-          if (sel.isStringSelectMenu() && pendingSlotConfig) {
-            pendingSlotConfig.key = sel.values[0] as StatKey;
-          }
-          await sel.message.delete().catch(() => {});
-        } catch { /* timed out */ }
-        await editSlotDetailView();
+        selectionMode = 'stat';
+        await i.update({ components: getStatSelectComponents() });
+
+      } else if (i.customId === 'slot_period' && i.isStringSelectMenu() && selectionMode === 'period') {
+        if (pendingSlotConfig) pendingSlotConfig.period = i.values[0] as StatPeriod;
+        selectionMode = null;
+        await slotDetailView(i);
+
+      } else if (i.customId === 'stat_assign' && i.isStringSelectMenu() && selectionMode === 'stat') {
+        if (pendingSlotConfig) pendingSlotConfig.key = i.values[0] as StatKey;
+        selectionMode = null;
+        await slotDetailView(i);
+
+      } else if (i.customId === 'slot_select_confirm') {
+        selectionMode = null;
+        await slotDetailView(i);
+
+      } else if (i.customId === 'slot_select_cancel') {
+        selectionMode = null;
+        await slotDetailView(i);
 
       } else if (i.customId === 'slot_save_slot') {
         if (selectedSlot !== null && pendingSlotConfig) {
@@ -891,6 +900,7 @@ async function handleConfig(
         }
         selectedSlot = null;
         pendingSlotConfig = null;
+        selectionMode = null;
         const slots = parseSlots();
         await i.update({
           embeds: [buildWidgetEmbed(slots, true)],
@@ -900,6 +910,7 @@ async function handleConfig(
       } else if (i.customId === 'slot_cancel') {
         selectedSlot = null;
         pendingSlotConfig = null;
+        selectionMode = null;
         const slots = parseSlots();
         await i.update({
           embeds: [buildWidgetEmbed(slots, pendingChanges)],
