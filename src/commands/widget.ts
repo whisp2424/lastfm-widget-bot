@@ -582,6 +582,14 @@ async function handleConfig(
     ];
   }
 
+  function commitPendingSlot(): void {
+    if (selectedSlot === null || !pendingSlotConfig) return;
+    const slots = parseSlots();
+    slots[selectedSlot] = pendingSlotConfig;
+    user.stat_order = JSON.stringify(slots);
+    pendingChanges = true;
+  }
+
   let selectedSlot: number | null = null;
   const mainEmbed = buildMainConfigEmbed(user);
   let refreshUsed = false;
@@ -878,6 +886,7 @@ async function handleConfig(
 
       } else if (i.customId === 'slot_toggle_suffix') {
         if (pendingSlotConfig) pendingSlotConfig.showSuffix = !pendingSlotConfig.showSuffix;
+        commitPendingSlot();
         await slotDetailView(i);
 
       } else if (i.customId === 'slot_change_period') {
@@ -890,11 +899,13 @@ async function handleConfig(
 
       } else if (i.customId === 'slot_period' && i.isStringSelectMenu() && selectionMode === 'period') {
         if (pendingSlotConfig) pendingSlotConfig.period = i.values[0] as StatPeriod;
+        commitPendingSlot();
         selectionMode = null;
         await slotDetailView(i);
 
       } else if (i.customId === 'stat_assign' && i.isStringSelectMenu() && selectionMode === 'stat') {
         if (pendingSlotConfig) pendingSlotConfig.key = i.values[0] as StatKey;
+        commitPendingSlot();
         selectionMode = null;
         await slotDetailView(i);
 
@@ -907,12 +918,7 @@ async function handleConfig(
         await slotDetailView(i);
 
       } else if (i.customId === 'slot_save_slot') {
-        if (selectedSlot !== null && pendingSlotConfig) {
-          const slots = parseSlots();
-          slots[selectedSlot] = pendingSlotConfig;
-          user.stat_order = JSON.stringify(slots);
-          pendingChanges = true;
-        }
+        commitPendingSlot();
         selectedSlot = null;
         pendingSlotConfig = null;
         selectionMode = null;
@@ -923,12 +929,6 @@ async function handleConfig(
         });
 
       } else if (i.customId === 'slot_cancel') {
-        if (selectedSlot !== null && pendingSlotConfig) {
-          const slots = parseSlots();
-          slots[selectedSlot] = pendingSlotConfig;
-          user.stat_order = JSON.stringify(slots);
-          pendingChanges = true;
-        }
         selectedSlot = null;
         pendingSlotConfig = null;
         selectionMode = null;
