@@ -1233,16 +1233,17 @@ function buildAvatarEmbed(
   const embed = new EmbedBuilder()
     .setColor(INFO)
     .setTitle(`${username} — Last.fm Profile`)
-    .setThumbnail(imageUrl)
-    .addFields(
-      { name: 'Total Scrobbles', value: `**${stats.scrobbles}** scrobbles`, inline: true },
-      { name: 'Loved Tracks', value: `**${stats.loved}** loved tracks`, inline: true },
-      { name: 'Artists', value: `**${stats.artists}** different artists`, inline: true },
-    );
+    .setThumbnail(imageUrl);
 
   if (stats.since) {
     embed.addFields({ name: 'Scrobbling Since', value: stats.since, inline: false });
   }
+
+  embed.addFields(
+    { name: 'Total Scrobbles', value: `**${stats.scrobbles}** scrobbles`, inline: false },
+    { name: 'Loved Tracks', value: `**${stats.loved}** loved tracks`, inline: false },
+    { name: 'Artists', value: `**${stats.artists}** different artists`, inline: false },
+  );
 
   return embed;
 }
