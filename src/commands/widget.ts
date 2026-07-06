@@ -1341,7 +1341,7 @@ async function handleImage(
         scrobbles: gfs('total_scrobbles'),
         artists: gfs('total_artists'),
         loved: gfs('loved_tracks'),
-        since: gfs('scrobbling_since', ''),
+        since: cachedStats.registered_unix ? `<t:${cachedStats.registered_unix}:D>` : '',
       },
       primaryImageUrl,
     );

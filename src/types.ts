@@ -53,6 +53,7 @@ export interface CachedStats {
   total_scrobbles: string;
   total_artists: string;
   loved_tracks: string;
+  registered_unix: string;
   top_track: string;
   top_track_7d: string;
   top_track_30d: string;

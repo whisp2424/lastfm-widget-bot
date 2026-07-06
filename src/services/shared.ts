@@ -191,7 +191,7 @@ export async function refreshUserWidget(
     {
       type: 1,
       name: 'scrobbling_since',
-       value: `<t:${info.registered.unixtime}:D>`,
+       value: `scrobbling since ${formatDate(info.registered.unixtime)}`,
     },
   ];
 
@@ -227,6 +227,7 @@ export async function refreshUserWidget(
     total_scrobbles: info.playcount.toLocaleString('en-US'),
     total_artists: info.artistCount.toLocaleString('en-US'),
     loved_tracks: lovedCount.toLocaleString('en-US'),
+    registered_unix: info.registered.unixtime,
     top_track: `${topTrack.artist} - ${topTrack.name}`,
     top_track_7d: `${topTrack7.artist} - ${topTrack7.name}`,
     top_track_30d: `${topTrack30.artist} - ${topTrack30.name}`,
