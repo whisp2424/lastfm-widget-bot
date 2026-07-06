@@ -23,7 +23,6 @@ import type { PrimaryImagePeriod, SecondaryImageType, SecondaryImagePeriod, Widg
 const SUCCESS = 0xa6e3a1;
 const ERROR = 0xba0000;
 const INFO = 0xba0000;
-const ACCENT = 0xD91C00;
 
 export const widgetCommand = {
   builder: new SlashCommandBuilder()
@@ -1127,7 +1126,7 @@ function buildArtistEmbed(
   title: string,
 ): EmbedBuilder {
   const embed = new EmbedBuilder()
-    .setColor(ACCENT)
+    .setColor(INFO)
     .setTitle(title)
     .setDescription(`**${name}**`)
     .setThumbnail(imageUrl);
@@ -1161,7 +1160,7 @@ function buildAlbumEmbed(
   title: string,
 ): EmbedBuilder {
   const embed = new EmbedBuilder()
-    .setColor(ACCENT)
+    .setColor(INFO)
     .setTitle(title)
     .setDescription(`**${artist}** — ${name}`)
     .setThumbnail(imageUrl);
@@ -1199,7 +1198,7 @@ function buildTrackEmbed(
   title: string,
 ): EmbedBuilder {
   const embed = new EmbedBuilder()
-    .setColor(ACCENT)
+    .setColor(INFO)
     .setTitle(title)
     .setDescription(`**${artist}** — ${name}`)
     .setThumbnail(coverUrl);
@@ -1231,21 +1230,20 @@ function buildAvatarEmbed(
   stats: { scrobbles: string | number; artists: string | number; loved: string | number; since: string },
   imageUrl: string | null,
 ): EmbedBuilder {
-  const embed = new EmbedBuilder()
-    .setColor(ACCENT)
-    .setTitle(`${username} — Last.fm Profile`)
-    .setThumbnail(imageUrl)
-    .addFields(
-      { name: 'Total Scrobbles', value: String(stats.scrobbles), inline: true },
-      { name: 'Artists', value: String(stats.artists), inline: true },
-      { name: 'Loved Tracks', value: String(stats.loved), inline: true },
-    );
+  const desc = [
+    `**${stats.scrobbles}** scrobbles`,
+    stats.since ? `Since ${stats.since}` : '',
+    '',
+    '─────────────',
+    `**${stats.loved}** loved tracks`,
+    `**${stats.artists}** different artists`,
+  ].filter(Boolean).join('\n');
 
-  if (stats.since) {
-    embed.addFields({ name: 'Scrobbling Since', value: stats.since, inline: false });
-  }
-
-  return embed;
+  return new EmbedBuilder()
+    .setColor(INFO)
+    .setTitle(username)
+    .setDescription(desc)
+    .setThumbnail(imageUrl);
 }
 
 async function handleImage(
