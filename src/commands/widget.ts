@@ -337,7 +337,7 @@ async function handleConfig(
         .setEmoji('🖼️'),
       new StringSelectMenuOptionBuilder()
         .setLabel('Widget Editor')
-        .setDescription('Customize stats, periods, and suffixes')
+        .setDescription('Customize your widget stats')
         .setValue('stat_order')
         .setEmoji('✏️'),
       new StringSelectMenuOptionBuilder()
