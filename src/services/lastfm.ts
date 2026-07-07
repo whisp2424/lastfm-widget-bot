@@ -203,26 +203,6 @@ export class LastFmService {
     return parseInt(data.lovedtracks?.['@attr']?.total ?? '0', 10);
   }
 
-  async getScrobblesOnDate(username: string, date: Date): Promise<number> {
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const data = await this.fetch<{
-      recenttracks: {
-        '@attr': { total: string };
-      };
-    }>('user.getRecentTracks', {
-      user: username,
-      from: Math.floor(startOfDay.getTime() / 1000),
-      to: Math.floor(endOfDay.getTime() / 1000),
-      limit: 1,
-    });
-
-    return parseInt(data.recenttracks?.['@attr']?.total ?? '0', 10);
-  }
-
   async getArtistInfo(artist: string): Promise<{
     name: string;
     bio: string;
