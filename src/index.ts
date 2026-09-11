@@ -11,7 +11,7 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 export const lastfm = new LastFmService(config.lastfmApiKey);
 export const nowplaying = new NowPlayingMonitor(lastfm);
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log(`[bot] Logged in as ${client.user?.tag}`);
 
   initScheduler(lastfm);
