@@ -5,7 +5,7 @@ import type { LastFmService } from './lastfm.js';
 import type { UserRow, DynamicField, WidgetPayload, StatKey, StatSlotConfig } from '../types.js';
 import { DEFAULT_SUBTITLES } from '../types.js';
 
-const DEFAULT_IMAGE_URL = 'https://lastfm.freetls.fastly.net/i/u/500x500/2a96cbd8b46e442fc41c2b86b821562f.png';
+const DEFAULT_IMAGE_URL = 'https://lastfm-img.freetls.fastly.net/i/u/500x500/2a96cbd8b46e442fc41c2b86b821562f.png';
 
 function formatDate(unixSeconds: string): string {
   const date = new Date(parseInt(unixSeconds, 10) * 1000);
