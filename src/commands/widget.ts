@@ -7,6 +7,7 @@ import {
   StringSelectMenuOptionBuilder,
   EmbedBuilder,
   ComponentType,
+  MessageFlags,
   ApplicationIntegrationType,
   InteractionContextType,
   type ChatInputCommandInteraction,
@@ -91,7 +92,7 @@ async function handleSetup(
   interaction: ChatInputCommandInteraction,
   lastfmService: LastFmService,
 ): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const username = interaction.options.getString('username', true);
 
@@ -289,13 +290,13 @@ async function handleConfig(
   const initialUser = getUser(interaction.user.id);
 
   if (!initialUser || !initialUser.authorized) {
-    await interaction.reply({ embeds: [unauthorizedEmbed()], ephemeral: true });
+    await interaction.reply({ embeds: [unauthorizedEmbed()], flags: MessageFlags.Ephemeral });
     return;
   }
 
   let user: UserRow = initialUser;
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const refreshBtn = new ButtonBuilder()
     .setCustomId('config_refresh')
@@ -788,7 +789,7 @@ async function handleConfig(
         if (!user.authorized) {
           await interaction.followUp({
             embeds: [new EmbedBuilder().setColor(ERROR).setTitle('Not Authorized').setDescription('Please reauthenticate first.')],
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
           return;
         }
@@ -814,7 +815,7 @@ async function handleConfig(
           });
           await interaction.followUp({
             embeds: [new EmbedBuilder().setColor(ERROR).setTitle('Refresh Failed').setDescription('Could not refresh your widget.')],
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
         }
 
@@ -1268,7 +1269,7 @@ async function handleImage(
   const user = getUser(interaction.user.id);
 
   if (!user || !user.authorized) {
-    await interaction.reply({ embeds: [unauthorizedEmbed()], ephemeral: true });
+    await interaction.reply({ embeds: [unauthorizedEmbed()], flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -1280,7 +1281,7 @@ async function handleImage(
           .setTitle('No Data Yet')
           .setDescription('Your widget hasn\'t been refreshed yet. Use `/widget refresh` first.'),
       ],
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
     return;
   }
@@ -1316,7 +1317,7 @@ async function handleImage(
   const artistLink = (n: string) => `[${n}](${publicBase}${enc(n)})`;
   const trackLink = (track: string, artist: string) => `[${track}](${publicBase}${enc(artist)}/_/${enc(track)})`;
 
-  await interaction.deferReply({ ephemeral: false });
+  await interaction.deferReply();
 
   if (!primaryImageUrl) {
     await interaction.editReply({
@@ -1515,7 +1516,7 @@ async function handleRefresh(
   interaction: ChatInputCommandInteraction,
   lastfmService: LastFmService,
 ): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const user = getUser(interaction.user.id);
 
