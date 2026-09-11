@@ -25,34 +25,8 @@ function cropSquare(url: string | null | undefined): string {
   return `https://wsrv.nl/?url=${encodeURIComponent(url)}&fit=cover&w=500&h=500&n=-1`;
 }
 
-function isLastFmCdnUrl(url: string): boolean {
-  return url.includes('/i/u/');
-}
-
-async function probeContentType(url: string): Promise<string | null> {
-  try {
-    const res = await fetch(url, {
-      method: 'HEAD',
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return null;
-    return res.headers.get('content-type')?.split(';')[0]?.trim() ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function withTruthfulExtension(url: string, contentType: string | null): string {
-  if (contentType === 'image/gif') return url.replace(/\.(png|jpe?g|webp)([?#]|$)/i, '.gif$2');
-  return url;
-}
-
-async function finalizeImage(url: string | null | undefined): Promise<string> {
-  if (!url || isDefaultImage(url)) return DEFAULT_IMAGE_URL;
-  if (!isLastFmCdnUrl(url)) return cropSquare(url);
-  const contentType = await probeContentType(url);
-  return withTruthfulExtension(url, contentType);
+function finalizeImage(url: string | null | undefined): string {
+  return cropSquare(url);
 }
 
 export const CYCLE_PERIODS = ['overall', '30d', '7d'] as const;
