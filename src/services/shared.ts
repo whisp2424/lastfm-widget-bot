@@ -20,6 +20,41 @@ function orDefault(url: string | null | undefined): string {
   return url ?? DEFAULT_IMAGE_URL;
 }
 
+function cropSquare(url: string | null | undefined): string {
+  if (!url || isDefaultImage(url)) return DEFAULT_IMAGE_URL;
+  return `https://wsrv.nl/?url=${encodeURIComponent(url)}&fit=cover&w=500&h=500&n=-1`;
+}
+
+function isLastFmCdnUrl(url: string): boolean {
+  return url.includes('/i/u/');
+}
+
+async function probeContentType(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      method: 'HEAD',
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    return res.headers.get('content-type')?.split(';')[0]?.trim() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function withTruthfulExtension(url: string, contentType: string | null): string {
+  if (contentType === 'image/gif') return url.replace(/\.(png|jpe?g|webp)([?#]|$)/i, '.gif$2');
+  return url;
+}
+
+async function finalizeImage(url: string | null | undefined): Promise<string> {
+  if (!url || isDefaultImage(url)) return DEFAULT_IMAGE_URL;
+  if (!isLastFmCdnUrl(url)) return cropSquare(url);
+  const contentType = await probeContentType(url);
+  return withTruthfulExtension(url, contentType);
+}
+
 export const CYCLE_PERIODS = ['overall', '30d', '7d'] as const;
 
 function safeFetch<T>(promise: Promise<T>, fallback: T): Promise<T> {
@@ -120,13 +155,18 @@ export async function refreshUserWidget(
   const shouldCycle = user.primary_image_period === 'cycle' || user.secondary_image_period === 'cycle' || statSlots.some(s => s.period === 'cycle');
   const globalCyclePeriod = shouldCycle ? CYCLE_PERIODS[user.cycle_index] : null;
 
-  const avatarUrl = orDefault(
-    info.image?.find((i) => i.size === 'extralarge')?.['#text']?.replace('/300x300/', '/500x500/'),
-  );
+  const avatarRaw =
+    info.image?.find((i) => i.size === 'extralarge')?.['#text']?.replace('/300x300/', '/500x500/') ?? null;
+  const recentArtistRaw =
+    recentTrack.name !== '—' ? await safeFetch(lastfmService.getArtistImage(recentTrack.artist), null) : null;
 
-  const artistImage = orDefault(topArtist.image);
-  const artistImage7 = orDefault(topArtist7.image);
-  const artistImage30 = orDefault(topArtist30.image);
+  const [avatarUrl, artistImage, artistImage7, artistImage30, recentArtistImage] = await Promise.all([
+    finalizeImage(avatarRaw),
+    finalizeImage(topArtist.image),
+    finalizeImage(topArtist7.image),
+    finalizeImage(topArtist30.image),
+    finalizeImage(recentArtistRaw),
+  ]);
   const trackCover = orDefault(topTrack.cover);
   const albumCover = orDefault(topAlbum.cover);
   const trackCover7 = orDefault(topTrack7.cover);
@@ -134,9 +174,6 @@ export async function refreshUserWidget(
   const albumCover7 = orDefault(topAlbum7.cover);
   const albumCover30 = orDefault(topAlbum30.cover);
   const recentCover = orDefault(recentTrack.cover);
-  const recentArtistImage = orDefault(
-    recentTrack.name !== '—' ? await safeFetch(lastfmService.getArtistImage(recentTrack.artist), null) : null,
-  );
 
   const imageSources: Record<string, string> = {
     avatar: avatarUrl,
